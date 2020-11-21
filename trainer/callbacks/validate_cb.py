@@ -4,6 +4,7 @@ from ..predictor_base import BasePredictor
 from .base_cb import *
 from .report_cb import *
 
+
 class ValidateCb(BoardCallback):
     """validate every n iteration,
     it will not report anything by default
@@ -16,13 +17,13 @@ class ValidateCb(BoardCallback):
         on_end: extra validation before ending (even it doesn't divide)
     """
     def __init__(
-        self,
-        loader: DataLoader,
-        n_val_cycle: int = None,
-        name: str = 'val',
-        callbacks=None,
-        on_end=False,
-        predictor_cls=BasePredictor,
+            self,
+            loader: DataLoader,
+            callbacks=None,
+            name: str = 'val',
+            n_val_cycle: int = None,
+            on_end=False,
+            predictor_cls=BasePredictor,
     ):
         # n_log_cycle = 1, when it say writes it should write
         super().__init__()
@@ -31,6 +32,8 @@ class ValidateCb(BoardCallback):
         self.name = name
         if callbacks is None:
             callbacks = []
+        if not isinstance(callbacks, list):
+            callbacks = [callbacks]
         self.callbacks = callbacks + self.make_default_callbacks()
         self.on_end = on_end
         self.predictor_cls = predictor_cls
@@ -51,12 +54,13 @@ class ValidateCb(BoardCallback):
     # so that others that might be able to use 'val_loss'
     @set_order(90)
     def on_batch_end(self, trainer, i_itr: int, n_max_itr: int, **kwargs):
-        if ((self.on_end and i_itr == n_max_itr) or i_itr % self.n_val_cycle == 0):
+        if ((self.on_end and i_itr == n_max_itr)
+                or i_itr % self.n_val_cycle == 0):
 
             # make prediction
-            predictor = self.predictor_cls(
-                trainer, callbacks=self.callbacks, collect_keys=[]
-            )
+            predictor = self.predictor_cls(trainer,
+                                           callbacks=self.callbacks,
+                                           collect_keys=[])
             predictor.predict(self.loader)
 
             # collect all data from callbacks
