@@ -21,14 +21,16 @@ class ValidateCb(BoardCallback):
             loader: DataLoader,
             callbacks=None,
             name: str = 'val',
-            n_val_cycle: int = None,
+            n_itr_cycle: int = None,
+            n_ep_cycle: int = None,
             on_end=False,
             predictor_cls=BasePredictor,
     ):
         # n_log_cycle = 1, when it say writes it should write
         super().__init__()
         self.loader = loader
-        self.n_val_cycle = n_val_cycle
+        self.n_itr_cycle = n_itr_cycle
+        self.n_ep_cycle = n_ep_cycle
         self.name = name
         if callbacks is None:
             callbacks = []
@@ -46,16 +48,19 @@ class ValidateCb(BoardCallback):
 
     def on_train_begin(self, n_ep_itr, **kwargs):
         super().on_train_begin(n_ep_itr=n_ep_itr, **kwargs)
-        if self.n_val_cycle is None:
-            # set deafult to 1 epoch
-            self.n_val_cycle = n_ep_itr
+        if self.n_itr_cycle is None:
+            if self.n_ep_cycle is not None:
+                self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+            else:
+                # default to 1 ep
+                self.n_itr_cycle = n_ep_itr
 
     # should run a bit early
     # so that others that might be able to use 'val_loss'
     @set_order(90)
     def on_batch_end(self, trainer, i_itr: int, n_max_itr: int, **kwargs):
         if ((self.on_end and i_itr == n_max_itr)
-                or i_itr % self.n_val_cycle == 0):
+                or i_itr % self.n_itr_cycle == 0):
 
             # make prediction
             predictor = self.predictor_cls(trainer,
