@@ -5,6 +5,7 @@ from .base_cb import *
 import shutil
 import json
 
+
 class AutoResumeCb(Callback):
     """auto save and resume for all callbacks and model, with multiple checkpoints
     Args:
@@ -18,25 +19,26 @@ class AutoResumeCb(Callback):
     _order = 1000
 
     def __init__(
-        self,
-        dirname: str,
-        n_save_cycle: int = None,
-        resume: bool = True,
-        resume_from='last',
-        n_keep: int = 0,
-        keep_best=False,
-        keep_fn=None,
-        metric: str = 'val_acc',
-        metric_best: str = 'max',  # or min
-        map_location=None,
-        extras=None,
-        verbose=False,
-        save_abrupt_end=True,
-        **kwargs
-    ):
+            self,
+            dirname: str,
+            n_itr_cycle: int = None,
+            n_ep_cycle: int = None,
+            resume: bool = True,
+            resume_from='last',
+            n_keep: int = 0,
+            keep_best=False,
+            keep_fn=None,
+            metric: str = 'val_acc',
+            metric_best: str = 'max',  # or min
+            map_location=None,
+            extras=None,
+            verbose=False,
+            save_abrupt_end=True,
+            **kwargs):
         super().__init__(**kwargs)
         self.dirname = dirname
-        self.n_save_cycle = n_save_cycle
+        self.n_itr_cycle = n_itr_cycle
+        self.n_ep_cycle = n_ep_cycle
         self.resume = resume
         self.resume_from = resume_from
         self.n_keep = n_keep
@@ -58,15 +60,18 @@ class AutoResumeCb(Callback):
     # should resume before normal loop
     @set_order(90)
     def on_train_begin(self, trainer, callbacks, n_ep_itr, **kwargs):
-        if self.n_save_cycle is None:
-            # set default to 1 epoch
-            self.n_save_cycle = n_ep_itr
+        if self.n_itr_cycle is None:
+            if self.n_ep_cycle is not None:
+                self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+            else:
+                # default to 1 ep
+                self.n_itr_cycle = n_ep_itr
         if self.resume:
             self._load(trainer, callbacks)
             self._start_itr = trainer.i_itr
 
     def on_batch_end(self, i_itr, trainer, callbacks, **kwargs):
-        if self.n_save_cycle > 0 and i_itr % self.n_save_cycle == 0:
+        if self.n_itr_cycle > 0 and i_itr % self.n_itr_cycle == 0:
             self._save(i_itr, trainer, callbacks, **kwargs)
 
     def on_train_end(self, i_itr, trainer, callbacks, **kwargs):
@@ -80,7 +85,11 @@ class AutoResumeCb(Callback):
             if i_itr == self._get_latest_itr():
                 # do nothing, no need to save
                 return
-            self._save(i_itr, trainer, callbacks, ignore_history=True, **kwargs)
+            self._save(i_itr,
+                       trainer,
+                       callbacks,
+                       ignore_history=True,
+                       **kwargs)
 
     def _load(self, trainer, callbacks):
         """load a checkpoint, decides where to load"""
@@ -116,7 +125,12 @@ class AutoResumeCb(Callback):
         assert v is not None, f"metric {self.metric} must be present for the save, you must need to set the cycles correctly, there are {all_keys}"
         return v
 
-    def _save(self, i_itr, trainer, callbacks, ignore_history: bool = False, **kwargs):
+    def _save(self,
+              i_itr,
+              trainer,
+              callbacks,
+              ignore_history: bool = False,
+              **kwargs):
         """save a checkpoint, decides where to save"""
         try:
             if self.keep_best:
@@ -136,7 +150,11 @@ class AutoResumeCb(Callback):
         last_dir = str(i_itr)
         dirname = os.path.join(self.dirname, last_dir)
         if self.verbose: print(f'saving {last_dir} ...')
-        save_all(dirname, trainer, callbacks, verbose=self.verbose, extras=self.extras)
+        save_all(dirname,
+                 trainer,
+                 callbacks,
+                 verbose=self.verbose,
+                 extras=self.extras)
 
         # for legacy
         if 'excludes' not in self._state:
@@ -187,8 +205,10 @@ class AutoResumeCb(Callback):
     def _symlink_latest(self):
         return symlink(self.dirname, self._get_latest_itr(), 'latest')
 
+
 # alias
 AutoResume2Cb = AutoResumeCb
+
 
 def combine_keep_fn(fns):
     def fn(*args, **kwargs):
@@ -199,6 +219,7 @@ def combine_keep_fn(fns):
         return out
 
     return fn
+
 
 class ExcludeOnLRChange:
     """
@@ -225,6 +246,7 @@ class ExcludeOnLRChange:
             return True
         return False
 
+
 class SaveEvery:
     """
     Args:
@@ -240,6 +262,7 @@ class SaveEvery:
         else:
             return False
 
+
 def iterate_cb(callbacks):
     cnt = defaultdict(lambda: 0)
     for cb in callbacks:
@@ -248,11 +271,14 @@ def iterate_cb(callbacks):
         yield cb, _name
         cnt[name] += 1
 
+
 def save_random_state(path):
     safe_torch_save(get_random_state(), path)
 
+
 def load_random_state(path):
     set_random_state(torch.load(path))
+
 
 def prune(i_itr, exclude: List[str], n_keep, dirname, verbose):
     # list dirs to be remove
@@ -287,14 +313,17 @@ def prune(i_itr, exclude: List[str], n_keep, dirname, verbose):
         _dirname = os.path.join(dirname, str(itr))
         shutil.rmtree(_dirname)
 
+
 def get_latest_itr(dirname):
     """look in the directory find the largest number"""
     if not os.path.exists(dirname):
         return None
-    itrs = sorted([int(p) for p in os.listdir(dirname) if p not in ('best', 'latest')])
+    itrs = sorted(
+        [int(p) for p in os.listdir(dirname) if p not in ('best', 'latest')])
     if len(itrs) == 0:
         return None
     return itrs[-1]
+
 
 def symlink(dirname, tgt_itr, name):
     """actually save the chekcpoint given the location"""
@@ -313,9 +342,11 @@ def symlink(dirname, tgt_itr, name):
         str(tgt_itr),
         name,
         target_is_directory=True,
-        dir_fd=os.open(dirname, os.O_RDONLY),  # important to make the link visible
+        dir_fd=os.open(dirname,
+                       os.O_RDONLY),  # important to make the link visible
     )
     return str(tgt_itr)
+
 
 def save_all(dirname, trainer, callbacks, extras=None, verbose=False):
     """actually save the chekcpoint given the location"""
@@ -346,9 +377,13 @@ def save_all(dirname, trainer, callbacks, extras=None, verbose=False):
     if verbose:
         print(f'saving took {time.time() - start_time:.2f} seconds')
 
-def load_all(
-    dirname, trainer, callbacks, map_location=None, verbose=False, load_rng=True
-):
+
+def load_all(dirname,
+             trainer,
+             callbacks,
+             map_location=None,
+             verbose=False,
+             load_rng=True):
     """actually load the chekcpoint given the location"""
     if os.path.exists(dirname):
         start_time = time.time()
@@ -380,8 +415,7 @@ def load_all(
                 if os.environ.get('MLKIT_RESUME_IGNORE', False):
                     print(
                         f'callback {name} (ignore due to MLKIT_RESUME_IGNORE)'
-                        f' error {e} ... skipping'
-                    )
+                        f' error {e} ... skipping')
                 else:
                     raise e
 
