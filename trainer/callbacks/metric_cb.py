@@ -4,6 +4,7 @@ from ..average import *
 from ..types import *
 from .report_cb import *
 
+
 class CollectCb(StatsCallback):
     """collect the prediction of a whole episode"""
     def __init__(self, keys):
@@ -39,6 +40,7 @@ class CollectCb(StatsCallback):
                 if i_itr % n_ep_itr == 0:
                     buffer[k] = self._combine(buffer[k])
 
+
 class MovingAvgCb(BoardCallback):
     """
     a moving average, doesn't reset between epochs
@@ -71,6 +73,7 @@ class MovingAvgCb(BoardCallback):
         else:
             raise NotImplementedError()
 
+
 class AvgCb(StatsCallback):
     """
     AvgCb uses average, and will reset every epoch, used in validation
@@ -87,12 +90,13 @@ class AvgCb(StatsCallback):
 
     def on_backward_begin(self, i_itr, forward, **kwargs):
         for k in self.keys:
-            val = forward[k].item()
+            val = item(forward[k])
             n = forward['n']
             self.avg[k].update(val, w=n)
         info = {k: self.avg[k].val() for k in self.keys}
         info['i_itr'] = i_itr
         self.add_to_bar_and_hist(info)
+
 
 class AUROCCb(CollectCb):
     """add area-under-roc-curve during validation
