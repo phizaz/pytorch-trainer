@@ -19,10 +19,7 @@ class BasePredictor(LooperInterface):
         if len(collect_keys) > 0:
             callbacks += [CollectCb(collect_keys)]
         self.callbacks = callbacks
-        self.looper = Looper(base=self,
-                             net=self.trainer.net,
-                             mode='eval',
-                             callbacks=self.callbacks)
+        self.looper = Looper(base=self, callbacks=self.callbacks)
 
     def on_train_begin(self, **kwargs):
         # maintain the default behavior from the trainer
@@ -35,12 +32,16 @@ class BasePredictor(LooperInterface):
     @torch.no_grad()
     def forward_pass(self, data, **kwargs) -> Dict:
         # maintain the default behavior from the tranier
-        return self.trainer.forward_pass(data, **kwargs)
+        # but runs it with 'eval' mode
+        with set_mode(self.trainer.net, 'eval'):
+            return self.trainer.forward_pass(data, **kwargs)
 
     def backward_pass(self, forward, **kwargs):
+        # no need for backward
         pass
 
     def optimize(self, **kwargs):
+        # no need for optimizing
         pass
 
     def predict(self, loader: DataLoader):
@@ -52,3 +53,22 @@ class BasePredictor(LooperInterface):
         self.looper.loop(loader, n_max_itr=len(loader))
         # returns what's been collecting
         return self.buffer
+
+
+@contextlib.contextmanager
+def set_mode(net: nn.Module, mode: str):
+    """set the model's mode in a context manager"""
+    before_train = net.training
+    if mode == 'train':
+        net.train()
+    elif mode == 'eval':
+        net.eval()
+    else:
+        raise NotImplementedError()
+
+    yield net
+
+    if before_train:
+        net.train()
+    else:
+        net.eval()

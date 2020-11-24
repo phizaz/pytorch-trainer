@@ -43,27 +43,26 @@ class Looper:
     Goal: removing the duplicated parts between trainer and predictor
 
     Args:
-        predictor: a class with "on_ep_begin", "forward_pass", "backward_pass", "optimize" methods
-        callbacks: 
+        base: a class with "on_ep_begin", "forward_pass", "backward_pass", "optimize" methods
+        net: the model
+        mode: 'train' or 'eval'
     """
     def __init__(
             self,
             base: LooperInterface,
-            net: nn.Module,
-            mode: str,
             callbacks: List[Callback],
     ):
         self.base = base
-        self.net = net
-        self.mode = mode
         self.callbacks = callbacks
 
     @property
     def state(self):
+        # state is kept in the base
         return self.base.state
 
     @property
     def buffer(self):
+        # buffer is kept in the base
         return self.base.buffer
 
     def _kwargs(self, kwargs=dict()):
@@ -88,13 +87,13 @@ class Looper:
         return kwargs
 
     def one_batch(self, data):
+        """runs for one batch"""
         # start of iteration
         self.state['i_itr'] += 1
         self('on_batch_begin', data=data)
         # forward pass
         self('on_forward_begin', data=data)
-        with set_mode(self.net, self.mode):
-            forward = self.base.forward_pass(data, **self._kwargs())
+        forward = self.base.forward_pass(data, **self._kwargs())
         self('on_forward_end', data=data, forward=forward)
         # backward pass
         self('on_backward_begin', data=data, forward=forward)
@@ -111,6 +110,7 @@ class Looper:
             raise StopIteration()
 
     def one_epoch(self, loader):
+        """runs for one epoch"""
         self.base.on_ep_begin(**self._kwargs())
         self('on_ep_begin')
         try:
@@ -126,6 +126,7 @@ class Looper:
             raise
 
     def loop(self, loader: DataLoader, n_max_itr: int):
+        """main method to loop over the dataloader"""
         self.loader = loader
         self.n_max_itr = n_max_itr
 
@@ -157,22 +158,3 @@ class Looper:
         return callback_call(callbacks=self.callbacks,
                              method=event,
                              kwargs=self._kwargs(kwargs))
-
-
-@contextlib.contextmanager
-def set_mode(net: nn.Module, mode: str):
-    """set the model's mode in a context manager"""
-    before_train = net.training
-    if mode == 'train':
-        net.train()
-    elif mode == 'eval':
-        net.eval()
-    else:
-        raise NotImplementedError()
-
-    yield net
-
-    if before_train:
-        net.train()
-    else:
-        net.eval()

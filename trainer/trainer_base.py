@@ -45,11 +45,9 @@ class BaseTrainer(LooperInterface):
             callbacks = self.make_default_callbacks()
         self.callbacks = callbacks
 
-        # looper
-        self.looper = Looper(self,
-                             net=self.net,
-                             mode='train',
-                             callbacks=callbacks)
+        # looper is the one who calls all the methods in this trainer
+        # looper supplies argument (also kwargs) into each method
+        self.looper = Looper(self, callbacks=callbacks)
 
     @property
     def i_itr(self):
@@ -66,7 +64,7 @@ class BaseTrainer(LooperInterface):
         ]
 
     def on_train_begin(self, **kwargs):
-        """this is useful to implement apex"""
+        """this is useful to implement automatic mixed-precision"""
         pass
 
     def on_ep_begin(self, **kwargs):
@@ -74,6 +72,7 @@ class BaseTrainer(LooperInterface):
         pass
 
     def forward_pass(self, data, **kwargs) -> Dict:
+        """forward pass of the model, must return a dictionary."""
         x, y = data
         with time_elapsed_to_profiler('forward'):
             pred = self.net(x)
@@ -132,14 +131,16 @@ class BaseTrainer(LooperInterface):
         }
 
     def load_state(self, state):
+        # load the network state
         if self.net is not None:
             self.net.load_state_dict(state['net'])
-        # only load if we have an optimizer
+        # load the optimizer state
         if self.opt is not None:
             if 'opt' not in state or state['opt'] is None:
                 print('warning: cannot load the optimizer state!')
             else:
                 self.opt.load_state_dict(state['opt'])
+        # load the trainer state
         self.state.update(state['state'])
 
     def save(self, dirname: str):
@@ -154,6 +155,7 @@ class BaseTrainer(LooperInterface):
         safe_torch_save(notnet, f'{dirname}/trainer.pkl')
 
     def load(self, dirname: str):
+        """load the trainer's state including net, opt, state"""
         if dirname[-4:] == '.pkl':
             # this is old version, loads the whole state
             data = torch.load(dirname, map_location=self.device)
