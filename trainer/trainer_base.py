@@ -29,11 +29,13 @@ class BaseTrainer(LooperInterface):
         self.device = device
 
         if net_fn is not None:
+            # create a model from a factory
             self.net = net_fn().to(self.device)
         else:
             self.net = None
 
         if opt_fn is not None:
+            # create an optimizer from a factory
             self.opt = opt_fn(self.net)
         else:
             self.opt = None
@@ -185,8 +187,3 @@ class BaseTrainer(LooperInterface):
 
     def __str__(self):
         return self.__repr__()
-
-
-def datetime_str():
-    """useful for naming the save path"""
-    return datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
