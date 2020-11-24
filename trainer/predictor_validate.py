@@ -5,6 +5,12 @@ from .predictor_base import BasePredictor
 
 
 class ValidatePredictor(BasePredictor):
+    def __init__(self, trainer: BaseTrainer, callbacks=[]):
+        super(BasePredictor, self).__init__()
+        self.trainer = trainer
+        self.callbacks = callbacks
+        self.looper = Looper(base=self, callbacks=self.callbacks)
+
     def predict(self, loader: DataLoader):
         """validate predictor returns all the stats instead of the prediction"""
         self.looper.loop(loader, n_max_itr=len(loader))
