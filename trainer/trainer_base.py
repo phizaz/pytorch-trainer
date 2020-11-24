@@ -10,18 +10,20 @@ from .tqdm import *
 
 __all__ = ['BaseTrainer']
 
+
 class BaseTrainer(LooperInterface):
     """
     Args:
         callbacks: list of callbacks, leave as None for defaults
     """
     def __init__(
-        self,
-        net_fn: Callable,
-        opt_fn: Callable,
-        device: str,
-        callbacks=None,
+            self,
+            net_fn: Callable,
+            opt_fn: Callable,
+            device: str,
+            callbacks=None,
     ):
+        super().__init__()
         self.net_fn = net_fn
         self.opt_fn = opt_fn
         self.device = device
@@ -42,15 +44,14 @@ class BaseTrainer(LooperInterface):
         self.callbacks = callbacks
 
         # looper
-        self.looper = Looper(self, net=self.net, mode='train', callbacks=callbacks)
+        self.looper = Looper(self,
+                             net=self.net,
+                             mode='train',
+                             callbacks=callbacks)
 
     @property
     def i_itr(self):
-        return self.looper.state['i_itr']
-
-    @property
-    def state(self):
-        return self.looper.state
+        return self.state['i_itr']
 
     @classmethod
     def make_default_callbacks(cls):
@@ -95,13 +96,13 @@ class BaseTrainer(LooperInterface):
 
     def on_abrupt_end(self, **kwargs):
         # this rolls back the i_itr on the failed iteration
-        self.looper.state['i_itr'] = max(self.looper.state['i_itr'] - 1, 0)
+        self.state['i_itr'] = max(self.state['i_itr'] - 1, 0)
 
     def train(
-        self,
-        loader: DataLoader,
-        n_max_itr: int = None,
-        n_max_ep: int = None,
+            self,
+            loader: DataLoader,
+            n_max_itr: int = None,
+            n_max_ep: int = None,
     ) -> pd.DataFrame:
         """
         Args: 
@@ -158,8 +159,10 @@ class BaseTrainer(LooperInterface):
         else:
             # new version, load from two files
             state = {
-                'net': torch.load(f'{dirname}/model.pkl', map_location=self.device),
-                **torch.load(f'{dirname}/trainer.pkl', map_location=self.device),
+                'net': torch.load(f'{dirname}/model.pkl',
+                                  map_location=self.device),
+                **torch.load(f'{dirname}/trainer.pkl',
+                             map_location=self.device),
             }
             self.load_state(state)
 
@@ -178,10 +181,11 @@ class BaseTrainer(LooperInterface):
         safe_torch_save(notnet, f'{dirname}/trainer.pkl')
 
     def __repr__(self):
-        return f'<BaseTrainer {self.looper.state}>'
+        return f'<BaseTrainer {self.state}>'
 
     def __str__(self):
         return self.__repr__()
+
 
 def datetime_str():
     """useful for naming the save path"""

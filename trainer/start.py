@@ -1,6 +1,7 @@
 from . import scheduler
 from .loader_base import *
 from .predictor_base import *
+from .predictor_validate import *
 from .trainer_base import *
 from .callbacks.start import *
 from .loader import *

@@ -34,6 +34,7 @@ class AutoResumeCb(Callback):
             extras=None,
             verbose=False,
             save_abrupt_end=True,
+            return_best_model=False,
             **kwargs):
         super().__init__(**kwargs)
         self.dirname = dirname
@@ -52,6 +53,7 @@ class AutoResumeCb(Callback):
         self.extras = extras
         self.verbose = verbose
         self.save_abrupt_end = save_abrupt_end
+        self.return_best_model = return_best_model
 
         # keep tracks used in best
         self._state['history'] = {'i_itr': [], 'metric': []}
@@ -80,6 +82,10 @@ class AutoResumeCb(Callback):
             return
         self._save(i_itr, trainer, callbacks, ignore_history=True, **kwargs)
 
+        if self.return_best_model:
+            # load the best model at the end
+            self._load_best(trainer)
+
     def on_abrupt_end(self, i_itr, trainer, callbacks, **kwargs):
         if self.save_abrupt_end:
             if i_itr == self._get_latest_itr():
@@ -90,6 +96,19 @@ class AutoResumeCb(Callback):
                        callbacks,
                        ignore_history=True,
                        **kwargs)
+
+        if self.return_best_model:
+            # load the best model at the end
+            self._load_best(trainer)
+
+    def _load_best(self, trainer):
+        """load best iteration to the trainer"""
+        best_itr = self._get_best_itr()
+        if best_itr is None:
+            print('warning: there is no best model to load')
+            return
+        best_path = os.path.join(self.dirname, str(best_itr))
+        trainer.load(best_path)
 
     def _load(self, trainer, callbacks):
         """load a checkpoint, decides where to load"""

@@ -7,8 +7,17 @@ from .callbacks.base_cb import *
 from .tqdm import *
 from .types import *
 
+
 class LooperInterface:
     """a base for looper should have the following interface"""
+    def __init__(self):
+        # book keeping
+        self.state = {'i_itr': 0}
+        # buffer collects outputs from the model
+        # this is useful for calculating dataset-wise metrics, like BLEU or AUROC
+        # callbacks populate data in buffer
+        self.buffer = defaultdict(list)
+
     def on_train_begin(self, **kwargs):
         pass
 
@@ -27,6 +36,7 @@ class LooperInterface:
     def on_abrupt_end(self, **kwargs):
         pass
 
+
 class Looper:
     """
     looper lopps over a loader with predefined number of iterations
@@ -37,22 +47,45 @@ class Looper:
         callbacks: 
     """
     def __init__(
-        self,
-        base: LooperInterface,
-        net: nn.Module,
-        mode: str,
-        callbacks: List[Callback],
+            self,
+            base: LooperInterface,
+            net: nn.Module,
+            mode: str,
+            callbacks: List[Callback],
     ):
         self.base = base
         self.net = net
         self.mode = mode
         self.callbacks = callbacks
 
-        self.state = {'i_itr': 0}
-        # buffer collects outputs from the model
-        # this is useful for calculating dataset-wise metrics, like BLEU or AUROC
-        # callbacks populate data in buffer
-        self.buffer = defaultdict(list)
+    @property
+    def state(self):
+        return self.base.state
+
+    @property
+    def buffer(self):
+        return self.base.buffer
+
+    def _kwargs(self, kwargs=dict()):
+        """these will be supplied to callbacks and method calls,
+        these are variables that are expected to be used by any callback"""
+        n_ep_itr = len(self.loader)
+        kwargs = {
+            'trainer': self.base,
+            'looper': self,
+            'loader': self.loader,
+            'n_max_itr': self.n_max_itr,
+            'n_ep_itr': n_ep_itr,
+            'callbacks': self.callbacks,
+            'progress': get_default_tqdm(),
+            'i_ep': int(self.state['i_itr'] / n_ep_itr) + 1,
+            'f_ep': self.state['i_itr'] / n_ep_itr,
+            'p_ep': (self.state['i_itr'] % n_ep_itr) / n_ep_itr * 100,
+            'buffer': self.buffer,
+            **self.state,
+            **kwargs,
+        }
+        return kwargs
 
     def one_batch(self, data):
         # start of iteration
@@ -119,32 +152,12 @@ class Looper:
             self('on_abrupt_end', e=e)
             raise e
 
-    def _kwargs(self, kwargs=dict()):
-        """these will be supplied to callbacks,
-        these are variables that are expected to be used by any callback"""
-        n_ep_itr = len(self.loader)
-        kwargs = {
-            'trainer': self.base,
-            'looper': self,
-            'loader': self.loader,
-            'n_max_itr': self.n_max_itr,
-            'n_ep_itr': n_ep_itr,
-            'callbacks': self.callbacks,
-            'progress': get_default_tqdm(),
-            'i_ep': int(self.state['i_itr'] / n_ep_itr) + 1,
-            'f_ep': self.state['i_itr'] / n_ep_itr,
-            'p_ep': (self.state['i_itr'] % n_ep_itr) / n_ep_itr * 100,
-            'buffer': self.buffer,
-            **self.state,
-            **kwargs,
-        }
-        return kwargs
-
     def __call__(self, event, **kwargs):
         """call event callbacks"""
-        return callback_call(
-            callbacks=self.callbacks, method=event, kwargs=self._kwargs(kwargs)
-        )
+        return callback_call(callbacks=self.callbacks,
+                             method=event,
+                             kwargs=self._kwargs(kwargs))
+
 
 @contextlib.contextmanager
 def set_mode(net: nn.Module, mode: str):

@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader
 
-from ..predictor_base import BasePredictor
+from ..predictor_validate import ValidatePredictor
 from .base_cb import *
 from .report_cb import *
 
@@ -24,7 +24,7 @@ class ValidateCb(BoardCallback):
             n_itr_cycle: int = None,
             n_ep_cycle: int = None,
             on_end=False,
-            predictor_cls=BasePredictor,
+            predictor_cls=ValidatePredictor,
     ):
         # n_log_cycle = 1, when it say writes it should write
         super().__init__()
@@ -38,6 +38,9 @@ class ValidateCb(BoardCallback):
             callbacks = [callbacks]
         self.callbacks = callbacks + self.make_default_callbacks()
         self.on_end = on_end
+        assert issubclass(
+            predictor_cls, ValidatePredictor
+        ), f'predictor_cls must be a derivation of ValidatePredictor'
         self.predictor_cls = predictor_cls
 
     def make_default_callbacks(self):
@@ -62,30 +65,34 @@ class ValidateCb(BoardCallback):
         if ((self.on_end and i_itr == n_max_itr)
                 or i_itr % self.n_itr_cycle == 0):
 
-            # make prediction
+            # make prediction and collect the stats
+            # predictor returns the stats
             predictor = self.predictor_cls(trainer,
                                            callbacks=self.callbacks,
                                            collect_keys=[])
-            predictor.predict(self.loader)
+            res = predictor.predict(self.loader)
+            if isinstance(res, tuple):
+                bar, info = res
+                assert isinstance(bar, dict)
+                assert isinstance(info, dict)
+            elif isinstance(res, dict):
+                bar = res
+                info = {}
+            else:
+                raise NotImplementedError()
 
-            # collect all data from callbacks
-            out = StatsCallback.collect_latest(self.callbacks)
+            # prepend the keys with its name
+            def prepend(d):
+                out = {}
+                for k, v in d.items():
+                    out[f'{self.name}_{k}'] = v
+                return out
 
-            # the keys in the callbacks should be visible on the progress bar
-            # everything else is kept in the buffer (not visible)
-            bar_keys = set()
-            for cb in self.callbacks:
-                if isinstance(cb, StatsCallback):
-                    bar_keys |= set(cb.stats.keys())
-            bar_keys -= set(['i_itr'])
+            bar = prepend(bar)
+            info = prepend(info)
 
-            bar = {'i_itr': i_itr}
-            info = {'i_itr': i_itr}
-            for k, v in out.items():
-                if k in bar_keys:
-                    bar[f'{self.name}_{k}'] = v
-                else:
-                    info[f'{self.name}_{k}'] = v
+            bar.update({'i_itr': i_itr})
+            info.update({'i_itr': i_itr})
             self.add_to_bar_and_hist(bar)
             self.add_to_hist(info)
             self._flush()
