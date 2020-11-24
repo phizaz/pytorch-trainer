@@ -67,9 +67,7 @@ class ValidateCb(BoardCallback):
 
             # make prediction and collect the stats
             # predictor returns the stats
-            predictor = self.predictor_cls(trainer,
-                                           callbacks=self.callbacks,
-                                           collect_keys=[])
+            predictor = self.predictor_cls(trainer, callbacks=self.callbacks)
             res = predictor.predict(self.loader)
             if isinstance(res, tuple):
                 bar, info = res

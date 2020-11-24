@@ -5,6 +5,11 @@ from .predictor_base import BasePredictor
 
 
 class ValidatePredictor(BasePredictor):
+    """
+    a predictor for validation process
+
+    Note: validate predictor doesn't have collect keys
+    """
     def __init__(self, trainer: BaseTrainer, callbacks=[]):
         super(BasePredictor, self).__init__()
         self.trainer = trainer
