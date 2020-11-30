@@ -7,8 +7,14 @@ from .callbacks.profiler_cb import *
 from .callbacks.report_cb import *
 from .looper import *
 from .tqdm import *
+from dataclasses import dataclass
 
 __all__ = ['BaseTrainer']
+
+
+@dataclass
+class BaseTrainerConfig:
+    device: str
 
 
 class BaseTrainer(LooperInterface):
@@ -18,27 +24,13 @@ class BaseTrainer(LooperInterface):
     """
     def __init__(
             self,
-            net_fn: Callable,
-            opt_fn: Callable,
-            device: str,
+            conf: BaseTrainerConfig,
             callbacks=None,
     ):
         super().__init__()
-        self.net_fn = net_fn
-        self.opt_fn = opt_fn
-        self.device = device
-
-        if net_fn is not None:
-            # create a model from a factory
-            self.net = net_fn().to(self.device)
-        else:
-            self.net = None
-
-        if opt_fn is not None:
-            # create an optimizer from a factory
-            self.opt = opt_fn(self.net)
-        else:
-            self.opt = None
+        self.conf = conf
+        self.net = self.make_net().to(self.device)
+        self.opt = self.make_opt(self.net)
 
         # after everything is ready
         if callbacks is None:
@@ -53,6 +45,10 @@ class BaseTrainer(LooperInterface):
     def i_itr(self):
         return self.state['i_itr']
 
+    @property
+    def device(self):
+        return self.conf.device
+
     @classmethod
     def make_default_callbacks(cls):
         return [
@@ -62,6 +58,14 @@ class BaseTrainer(LooperInterface):
             BatchPerSecondCb(),
             ReportLRCb(),
         ]
+
+    def make_net(self):
+        """the default net function"""
+        return None
+
+    def make_opt(self, net: nn.Module):
+        """the default opt function"""
+        return None
 
     def on_train_begin(self, **kwargs):
         """this is useful to implement automatic mixed-precision"""
