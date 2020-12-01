@@ -188,7 +188,7 @@ class ReportWeightNormCb(BoardCallback):
         self.name = name
         self.use_histogram = use_histogram
 
-    def on_backward_end(self, trainer, i_itr, **kwargs):
+    def on_step_end(self, trainer, i_itr, **kwargs):
         if self.use_histogram:
             self.add_to_board_histogram(
                 f'{self.name}/hist', lambda: nn.utils.parameters_to_vector(
