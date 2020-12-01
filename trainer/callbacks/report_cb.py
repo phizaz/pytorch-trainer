@@ -1,11 +1,13 @@
 import time
 from collections import deque
+from trainer.average import SMA
 
 from ..loader_base import BaseLoaderWrapper
 from ..csv import *
 from ..params_grads import *
 from ..tqdm import *
 from .base_cb import *
+
 
 class ReportItrCb(BoardCallback):
     def on_batch_begin(self, i_itr, i_ep, p_ep, f_ep, **kwargs):
@@ -14,6 +16,7 @@ class ReportItrCb(BoardCallback):
             'f_ep': f_ep,
         })
         self.add_to_hist({'i_itr': i_itr, 'i_ep': i_ep, '%ep': p_ep})
+
 
 class ProgressCb(Callback):
     """call and collect stats from StatsCallback
@@ -89,6 +92,7 @@ class ProgressCb(Callback):
                 self.progress.close()
                 set_default_tqdm(None)
 
+
 class ReportLoaderStatsCb(StatsCallback):
     def on_batch_begin(self, loader, i_itr, **kwargs):
         if isinstance(loader, BaseLoaderWrapper):
@@ -96,6 +100,7 @@ class ReportLoaderStatsCb(StatsCallback):
             stats = loader.stats()
             stats['i_itr'] = i_itr
             self.add_to_bar(stats)
+
 
 class LiveDataframeCb(StatsCallback):
     """pulls data from callbacks and write it into CSV in real-time"""
@@ -138,6 +143,7 @@ class LiveDataframeCb(StatsCallback):
             self.write(callbacks, i_itr)
             self.writer.close()
 
+
 class ReportLRCb(BoardCallback):
     """
     problem: this runs "before" autoresume making it a bit ugly.
@@ -155,20 +161,26 @@ class ReportLRCb(BoardCallback):
             info.update({f'lr{i+1}': lr for i, lr in enumerate(lrs[1:])})
         self.add_to_bar_and_hist(info)
 
+
 class ReportGradnormCb(BoardCallback):
-    def __init__(self, name='grad_norm', use_histogram=False, **kwargs):
+    def __init__(self, name='grad_norm', use_histogram=False, n=100, **kwargs):
         super().__init__(**kwargs)
         self.name = name
         self.use_histogram = use_histogram
+        self._state['avg'] = defaultdict(partial(SMA, size=n))
 
     def on_backward_end(self, trainer, i_itr, **kwargs):
         if self.use_histogram:
             grad_vec = grad_vec_from_params(iter_opt_params(trainer.opt))
             self.add_to_board_histogram(f'{self.name}/hist', grad_vec, i_itr)
-        self.add_to_hist({
-            'i_itr': i_itr,
-            self.name: lambda: grads_norm(iter_opt_params(trainer.opt))
-        })
+        if self.is_log_cycle(i_itr):
+            grad_norm = grads_norm(iter_opt_params(trainer.opt))
+            self.avg['grad_norm'].update(grad_norm)
+            self.add_to_hist({
+                'i_itr': i_itr,
+                self.name: self.avg['grad_norm'].val(),
+            })
+
 
 class ReportWeightNormCb(BoardCallback):
     def __init__(self, name='weight_norm', use_histogram=False, **kwargs):
@@ -179,20 +191,24 @@ class ReportWeightNormCb(BoardCallback):
     def on_backward_end(self, trainer, i_itr, **kwargs):
         if self.use_histogram:
             self.add_to_board_histogram(
-                f'{self.name}/hist',
-                lambda: nn.utils.parameters_to_vector(iter_opt_params(trainer.opt)), i_itr
-            )
+                f'{self.name}/hist', lambda: nn.utils.parameters_to_vector(
+                    iter_opt_params(trainer.opt)), i_itr)
         self.add_to_bar_and_hist({
-            'i_itr': i_itr,
-            self.name: lambda: many_l2_norm(*list(iter_opt_params(trainer.opt)))
+            'i_itr':
+            i_itr,
+            self.name:
+            lambda: many_l2_norm(*list(iter_opt_params(trainer.opt)))
         })
 
+
 class ReportDeltaNormCb(BoardCallback):
-    def __init__(self, name='delta_norm', use_histogram=False, **kwargs):
+    def __init__(self, name='delta_norm', use_histogram=False, n=100,
+                 **kwargs):
         super().__init__(**kwargs)
         self.name = name
         self.use_histogram = use_histogram
         self.w_before = None
+        self._state['avg'] = defaultdict(partial(SMA, size=n))
 
     def on_backward_end(self, trainer, i_itr, **kwargs):
         if self.is_log_cycle(i_itr) or self.is_log_cycle_hist(i_itr):
@@ -205,10 +221,18 @@ class ReportDeltaNormCb(BoardCallback):
 
         if self.use_histogram:
             self.add_to_board_histogram(f'{self.name}/hist', delta, i_itr)
-        self.add_to_hist({'i_itr': i_itr, self.name: lambda: delta().norm()})
+
+        if self.is_log_cycle(i_itr):
+            delta_norm = delta().norm()
+            self.avg['delta_norm'].update(delta_norm)
+            self.add_to_hist({
+                'i_itr': i_itr,
+                self.name: self.avg['delta_norm'].val(),
+            })
+
 
 class BatchPerSecondCb(BoardCallback):
-    def __init__(self, n=50, **kwargs):
+    def __init__(self, n=100, **kwargs):
         super().__init__(**kwargs)
         self.prev = None
         self.sum = deque(maxlen=n)
@@ -223,6 +247,7 @@ class BatchPerSecondCb(BoardCallback):
             self.add_to_hist({'batch_per_second': bps, 'i_itr': i_itr})
         self.prev = now
         super().on_batch_end(i_itr=i_itr, **kwargs)
+
 
 class TimeElapsedCb(BoardCallback):
     def __init__(self, **kwargs):
@@ -239,12 +264,14 @@ class TimeElapsedCb(BoardCallback):
         self.add_to_bar_and_hist({'i_itr': i_itr, 'time': self.time_elapsed})
         super().on_batch_end(i_itr=i_itr, **kwargs)
 
+
 class VisualizeWeightCb(BoardCallback):
     def on_batch_end(self, trainer, i_itr, **kwargs):
         if self.should_write(i_itr):
             param = nn.utils.parameters_to_vector(iter_opt_params(trainer.opt))
             self.writer.add_histogram('weight/hist/all', param, i_itr)
             self.writer.add_scalar('weight/norm/all', param.norm(), i_itr)
+
 
 def list_name(net, prefix=''):
     """traverse the module to get each layer and their names, 
@@ -262,6 +289,7 @@ def list_name(net, prefix=''):
             out.append((f'{prefix}/{name}', p))
 
     return out
+
 
 class VisualizeWeightByLayerCb(BoardCallback):
     def on_batch_end(self, trainer, i_itr, **kwargs):

@@ -14,7 +14,7 @@ class Stateful:
         return state
 
     def load_state(self, state):
-        self._state = state['self']
+        self._state.update(state['self'])
         # load states for the children
         for k, v in self._children.items():
             v.load_state(state[k])
