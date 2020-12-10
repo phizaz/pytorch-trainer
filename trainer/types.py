@@ -6,25 +6,26 @@ from: https://github.com/fastai/fastai/blob/master/fastai/torch_core.py
 
 import collections
 from functools import partial
-from typing import (
-    Any, AnyStr, Callable, Collection, Dict, Hashable, Iterator, List, Mapping, NewType,
-    Optional, Sequence, Tuple, TypeVar, Union
-)
+from typing import (Any, AnyStr, Callable, Collection, Dict, Hashable,
+                    Iterator, List, Mapping, NewType, Optional, Sequence,
+                    Tuple, TypeVar, Union)
 
 import numpy as np
-from torch import (
-    ByteTensor, DoubleTensor, FloatTensor, HalfTensor, LongTensor, ShortTensor, Tensor
-)
+from torch import (ByteTensor, DoubleTensor, FloatTensor, HalfTensor,
+                   LongTensor, ShortTensor, Tensor)
 
 NPArray = np.ndarray
 LambdaFn = Callable[[Tensor], Tensor]
+
 
 def is_python_primitive(x):
     """whether the object is python primitive"""
     return isinstance(x, (type(None), int, float, bool))
 
+
 def is_numpy(x):
     return isinstance(x, np.ndarray)
+
 
 def detach(t: Tensor):
     if is_python_primitive(t) or is_numpy(t):
@@ -34,6 +35,7 @@ def detach(t: Tensor):
     else:
         return apply_structure(t, detach)
 
+
 def detach_(t: Tensor):
     if is_python_primitive(t) or is_numpy(t):
         return t
@@ -42,9 +44,11 @@ def detach_(t: Tensor):
     else:
         return apply_structure(t, detach_)
 
+
 def item(x: Tensor):
     if isinstance(x, Tensor): return x.item()
     else: return x
+
 
 def cpu(t: Tensor):
     if is_python_primitive(t) or is_numpy(t):
@@ -54,6 +58,7 @@ def cpu(t: Tensor):
     else:
         return apply_structure(t, cpu)
 
+
 def cuda(t: Tensor, dev='cuda:0'):
     if is_python_primitive(t) or is_numpy(t):
         return t
@@ -62,6 +67,7 @@ def cuda(t: Tensor, dev='cuda:0'):
     else:
         return apply_structure(t, partial(cuda, dev=dev))
 
+
 def apply_structure(structure, fn):
     """Apply fn onto a structure and return the transformed structure
 
@@ -69,10 +75,10 @@ def apply_structure(structure, fn):
         structure: list, dict, singleton
         fn: a transformation function
     """
-    if isinstance(structure, collections.Mapping):
+    if isinstance(structure, dict):
         # support dict
         return {key: apply_structure(structure[key], fn) for key in structure}
-    elif isinstance(structure, collections.Sequence):
+    elif isinstance(structure, (tuple, list)):
         # support list and tuples
         _out = [apply_structure(e, fn) for e in structure]
         if isinstance(structure, tuple):
