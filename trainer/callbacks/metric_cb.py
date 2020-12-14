@@ -101,20 +101,28 @@ class AvgCb(StatsCallback):
 class AUROCCb(CollectCb):
     """add area-under-roc-curve during validation
     Args:
+        cls: classes to be selected
         sigmoid: automatically apply sigmoid on the prediction
         auroc_fn: (pred, y) -> {'auroc', 'support'}
         cls_names: a mapping i => string
     """
-    def __init__(self, cls=None, apply_sigmoid=True, cls_names=None):
+    def __init__(
+            self,
+            cls=None,
+            apply_sigmoid=True,
+            cls_names=None,
+            keys=('pred', 'y'),
+    ):
         # collect 'pred' and 'y'
-        super().__init__(keys=['pred', 'y'])
+        super().__init__(keys=keys)
+        self.keys = keys
         self.sigmoid = apply_sigmoid
         self.cls = cls
         self.cls_names = cls_names
 
     def on_ep_end(self, buffer, i_itr, **kwargs):
-        pred = buffer['pred']
-        y = buffer['y']
+        pred = buffer[self.keys[0]]
+        y = buffer[self.keys[1]]
         assert isinstance(pred, Tensor), 'you forgot to tensorify pred'
         assert isinstance(y, Tensor), 'you forgot to tensorify y'
 
