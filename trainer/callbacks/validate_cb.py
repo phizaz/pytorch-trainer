@@ -38,9 +38,6 @@ class ValidateCb(BoardCallback):
             callbacks = [callbacks]
         self.callbacks = callbacks + self.make_default_callbacks()
         self.on_end = on_end
-        assert issubclass(
-            predictor_cls, ValidatePredictor
-        ), f'predictor_cls must be a derivation of ValidatePredictor'
         self.predictor_cls = predictor_cls
 
     def make_default_callbacks(self):
