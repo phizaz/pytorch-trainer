@@ -3,6 +3,7 @@ from torch import optim
 from ..params_grads import *
 from .base_cb import *
 
+
 class GradientClipCb(Callback):
     """Supports Apex's AMP"""
     def __init__(self, clip_norm, **kwargs):
@@ -10,7 +11,9 @@ class GradientClipCb(Callback):
         self.clip_norm = clip_norm
 
     def on_backward_end(self, trainer, **kwargs):
-        nn.utils.clip_grad_norm_(iter_opt_params(trainer.opt), max_norm=self.clip_norm)
+        nn.utils.clip_grad_norm_(iter_opt_params(trainer.opt),
+                                 max_norm=self.clip_norm)
+
 
 class LRSchedulerCb(Callback):
     """
@@ -21,16 +24,9 @@ class LRSchedulerCb(Callback):
         super().__init__(**kwargs)
         self.lr_fn = lr_fn
 
-    def _get_stats(self, callbacks, key):
-        for cb in callbacks:
-            if isinstance(cb, StatsCallback):
-                if key in cb.stats:
-                    v = cb.stats[key]
-                    return v
-        raise NotImplementedError(f'{key} not found')
-
-    def on_step_begin(self, trainer, n_max_itr, i_itr, n_ep_itr, callbacks, **kwargs):
-        loss = self._get_stats(callbacks, 'loss')
+    def on_step_begin(self, trainer, n_max_itr, i_itr, n_ep_itr, callbacks,
+                      **kwargs):
+        loss = get_val_from_statcbs('loss', callbacks)
         # f_ep should start from 0.00 and is float
         f_ep = i_itr / n_ep_itr
         n_max_ep = n_max_itr / n_ep_itr
@@ -50,6 +46,7 @@ class LRSchedulerCb(Callback):
                     g['base_lr'] = g['lr']
                 g['lr'] = g['base_lr'] * scale
 
+
 class LRReducePlateauCb(Callback):
     """
     Args:
@@ -57,7 +54,13 @@ class LRReducePlateauCb(Callback):
         n_cycle: how frequent to check (need to match the validator), default: n_ep_itr
         **kwargs: see ReduceLROnPlateau on Pytorch
     """
-    def __init__(self, key, n_cycle=None, mode='max', patience=10, factor=0.2, **kwargs):
+    def __init__(self,
+                 key,
+                 n_cycle=None,
+                 mode='max',
+                 patience=10,
+                 factor=0.2,
+                 **kwargs):
         super().__init__()
         self.scheduler = None
         self.key = key
@@ -97,14 +100,9 @@ class LRReducePlateauCb(Callback):
     def on_batch_end(self, callbacks, i_itr, **kwargs):
         if i_itr % self.n_cycle == 0:
             # getting the key value from the stats
-            v = None
-            for cb in callbacks:
-                if isinstance(cb, StatsCallback):
-                    if self.key in cb.stats:
-                        v = cb.stats[self.key]
-                        break
-            assert v is not None, "needs to set the cycle to match the validator callback"
+            v = get_val_from_statcbs(self.key, callbacks)
             self.scheduler.step(v)
+
 
 class WeightPolyakCb(Callback):
     def __init__(self, rate, **kwargs):
@@ -127,6 +125,7 @@ class WeightPolyakCb(Callback):
         nn.utils.vector_to_parameters(new_w, trainer.net.parameters())
         self.w = None
 
+
 class TerminateLRCb(Callback):
     def __init__(self, lr_thresh, begin=0):
         super().__init__()
@@ -140,6 +139,50 @@ class TerminateLRCb(Callback):
                 print(f'terminated because lr {lr} <= {self.lr_thresh}')
                 raise KeyboardInterrupt()
 
+
+class EarlyStopCb(Callback):
+    def __init__(self,
+                 patience: int,
+                 n_ep_cycle=1,
+                 metric='val_loss',
+                 metric_mode='min'):
+        super().__init__()
+        assert metric in ('max', 'min')
+        self.patience = patience
+        self.metric = metric
+        self.metric_mode = metric_mode
+        self.n_ep_cycle = n_ep_cycle
+
+        self._state['best'] = None
+        self._state['best_i'] = None
+        self._state['i'] = 0
+
+    def on_train_begin(self, n_ep_itr, **kwargs):
+        self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+
+    def on_batch_end(self, trainer, i_itr, n_ep_itr, callbacks, **kwargs):
+        if i_itr % self.n_itr_cycle == 0:
+            self.i += 1
+            v = get_val_from_statcbs(self.metric, callbacks)
+            if self.best is None:
+                self.best = v
+                self.best_i = self.i
+            else:
+                if self.metric_mode == 'max':
+                    if v > self.best:
+                        self.best = v
+                        self.best_i = self.i
+                elif self.metric_mode == 'min':
+                    if v < self.best:
+                        self.best = v
+                        self.best_i = self.i
+                else:
+                    raise NotImplementedError()
+
+            if self.i - self.best_i > self.patience:
+                raise KeyboardInterrupt('early stop')
+
+
 class StopAnyTimeCb(Callback):
     """supress the keyboard interrupt allowing to stop the training anytime
     while getting the return results"""
@@ -150,6 +193,7 @@ class StopAnyTimeCb(Callback):
         else:
             # cannot suppress errors
             return False
+
 
 class AutoInterrupt(Callback):
     """raises a KeyboardInterrupt at n_itr, useful for playing around."""

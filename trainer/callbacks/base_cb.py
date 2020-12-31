@@ -11,6 +11,7 @@ from ..save import *
 from ..stateful import *
 from ..types import *
 
+
 def set_order(order):
     """decorator to set callback's method order
     usage: 
@@ -26,6 +27,7 @@ def set_order(order):
         return fn
 
     return inner
+
 
 class Callback(Stateful):
     """
@@ -95,6 +97,7 @@ class Callback(Stateful):
 
     def __str__(self):
         return self.__repr__()
+
 
 class StatsCallback(Callback):
     """
@@ -199,6 +202,7 @@ class StatsCallback(Callback):
             d[k] = _get_val(v)
         return d
 
+
 def _strip(x):
     """remvoe tensor-hood from the input structure"""
     if isinstance(x, Tensor):
@@ -206,6 +210,7 @@ def _strip(x):
     elif isinstance(x, dict):
         x = {k: _strip(v) for k, v in x.items()}
     return x
+
 
 class BoardCallback(StatsCallback):
     """writes into a tensorboard"""
@@ -266,6 +271,7 @@ class BoardCallback(StatsCallback):
     def is_log_cycle_hist(self, i_itr):
         return i_itr % self.n_log_hist_cycle == 0
 
+
 class NumpyWriterCb(Callback):
     """if this is present, boardcallback will write into the tensorboard"""
     # make sure it initializes before others use it
@@ -284,6 +290,7 @@ class NumpyWriterCb(Callback):
         if self.np_writer is not None:
             self.np_writer.flush()
             self.np_writer.close()
+
 
 class BaseNumpyWriterCb(Callback):
     def __init__(self, n_log_hist_cycle: int):
@@ -306,13 +313,16 @@ class BaseNumpyWriterCb(Callback):
         if self.np_writer is not None:
             self.np_writer.flush()
 
+
 class NumpyWeightHistCb(BaseNumpyWriterCb):
     def __init__(self, n_log_hist_cycle: int):
         super().__init__(n_log_hist_cycle)
 
     def on_batch_end(self, trainer, i_itr, **kwargs):
-        self.write_hist('weight', lambda: params_to_vec(trainer.net.parameters()), i_itr)
+        self.write_hist('weight',
+                        lambda: params_to_vec(trainer.net.parameters()), i_itr)
         super().on_batch_end(trainer=trainer, i_itr=i_itr, **kwargs)
+
 
 class TensorboardCb(Callback):
     """if this is present, boardcallback will write into the tensorboard
@@ -341,19 +351,28 @@ class TensorboardCb(Callback):
         if not self.resume:
             # if not resume re-generate the string
             self._state['start_time'] = self.start_time_string()
-        self.writer = SummaryWriter(
-            self.path + '/' + self._state['start_time'], flush_secs=10
-        )
+        self.writer = SummaryWriter(self.path + '/' +
+                                    self._state['start_time'],
+                                    flush_secs=10)
 
     def on_train_end(self, **kwargs):
         if self.writer is not None:
             self.writer.close()
+
+def get_val_from_statcbs(key, callbacks):
+    for cb in callbacks:
+        if isinstance(cb, StatsCallback):
+            if key in cb.stats:
+                v = cb.stats[key]
+                return v
+    raise NotImplementedError(f'{key} not found')
 
 def _get_val(v):
     """get val from a function or a value"""
     if callable(v):
         return v()
     return v
+
 
 def _append_dict(dict_of_list, dict):
     """
@@ -377,6 +396,7 @@ def _append_dict(dict_of_list, dict):
     for k, v in dict.items():
         dict_of_list[k].append(v)
     fill_na()
+
 
 def callback_call(callbacks: List[Callback], method: str, kwargs):
     """call a list of callbacks"""
@@ -410,6 +430,7 @@ def callback_call(callbacks: List[Callback], method: str, kwargs):
                 out |= res
     return out
 
+
 def _get_cb_order(cb, meth):
     fn = getattr(cb, meth, None)
     if fn is None:
@@ -417,6 +438,7 @@ def _get_cb_order(cb, meth):
     # return the method's order (if not use the cb's order)
     order = getattr(fn, '_order', cb._order)
     return order
+
 
 if __name__ == "__main__":
     a = StatsCallback()
