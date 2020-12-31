@@ -136,8 +136,8 @@ class TerminateLRCb(Callback):
         if i_itr >= self.begin:
             lr = trainer.opt.param_groups[0]['lr']
             if lr <= self.lr_thresh:
-                print(f'terminated because lr {lr} <= {self.lr_thresh}')
-                raise KeyboardInterrupt()
+                raise KeyboardInterrupt(
+                    f'terminated because lr {lr} <= {self.lr_thresh}')
 
 
 class EarlyStopCb(Callback):
@@ -145,12 +145,14 @@ class EarlyStopCb(Callback):
                  patience: int,
                  n_ep_cycle=1,
                  metric='val_loss',
-                 metric_mode='min'):
+                 metric_mode='min',
+                 verbose=False):
         super().__init__()
-        assert metric in ('max', 'min')
+        assert metric_mode in ('max', 'min')
         self.patience = patience
         self.metric = metric
         self.metric_mode = metric_mode
+        self.verbose = verbose
         self.n_ep_cycle = n_ep_cycle
 
         self._state['best'] = None
@@ -163,6 +165,8 @@ class EarlyStopCb(Callback):
     def on_batch_end(self, trainer, i_itr, n_ep_itr, callbacks, **kwargs):
         if i_itr % self.n_itr_cycle == 0:
             self.i += 1
+            if self.verbose:
+                print(f'early stop: round {self.i}')
             v = get_val_from_statcbs(self.metric, callbacks)
             if self.best is None:
                 self.best = v
@@ -179,6 +183,11 @@ class EarlyStopCb(Callback):
                 else:
                     raise NotImplementedError()
 
+            if self.verbose:
+                print(
+                    f'early stop: metric {v}, best {self.best} (round {self.best_i})'
+                )
+                print(f'early stop: gap {self.i - self.best_i}')
             if self.i - self.best_i > self.patience:
                 raise KeyboardInterrupt('early stop')
 

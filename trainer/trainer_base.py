@@ -9,7 +9,7 @@ from .looper import *
 from .tqdm import *
 from dataclasses import dataclass
 
-__all__ = ['BaseTrainer']
+__all__ = ['BaseTrainer', 'BaseTrainerConfig']
 
 
 @dataclass
