@@ -1,19 +1,17 @@
-from datetime import datetime
-
 import torch.nn.functional as F
 
 from .callbacks.base_cb import *
 from .callbacks.profiler_cb import *
 from .callbacks.report_cb import *
+from .config_base import *
 from .looper import *
 from .tqdm import *
-from dataclasses import dataclass
 
 __all__ = ['BaseTrainer', 'BaseTrainerConfig']
 
 
 @dataclass
-class BaseTrainerConfig:
+class BaseTrainerConfig(BaseConfig):
     device: str
 
 
@@ -29,10 +27,9 @@ class BaseTrainer(LooperInterface):
     ):
         super().__init__()
         self.conf = conf
-        self.net = self.make_net().to(self.device)
-        self.opt = self.make_opt(self.net)
+        self.net = None
+        self.opt = None
 
-        # after everything is ready
         if callbacks is None:
             callbacks = self.make_default_callbacks()
         self.callbacks = callbacks
@@ -40,6 +37,14 @@ class BaseTrainer(LooperInterface):
         # looper is the one who calls all the methods in this trainer
         # looper supplies argument (also kwargs) into each method
         self.looper = Looper(self, callbacks=callbacks)
+
+        self.init_net_and_opt()
+
+    def init_net_and_opt(self):
+        # init net and opt
+        # could be reran for resetting
+        self.net = self.make_net().to(self.device)
+        self.opt = self.make_opt(self.net)
 
     @property
     def i_itr(self):
@@ -155,11 +160,18 @@ class BaseTrainer(LooperInterface):
         state = self.get_state()
         net = state['net']
         notnet = {k: v for k, v in state.items() if k != 'net'}
+        self.conf.save(f'{dirname}/config.json')
         safe_torch_save(net, f'{dirname}/model.pkl')
         safe_torch_save(notnet, f'{dirname}/trainer.pkl')
 
-    def load(self, dirname: str):
+    def load(self, dirname: str, load_config: bool = True):
         """load the trainer's state including net, opt, state"""
+        if load_config:
+            self.conf.load(f'{dirname}/config.json')
+            # need to reinit the models and optimizers
+            # due to possible config changes
+            self.init_net_and_opt()
+
         if dirname[-4:] == '.pkl':
             # this is old version, loads the whole state
             data = torch.load(dirname, map_location=self.device)

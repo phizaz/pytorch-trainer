@@ -1,4 +1,5 @@
 from . import scheduler
+from .config_base import *
 from .loader_base import *
 from .predictor_base import *
 from .predictor_validate import *
