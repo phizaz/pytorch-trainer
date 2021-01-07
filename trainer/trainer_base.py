@@ -164,11 +164,16 @@ class BaseTrainer(LooperInterface):
         safe_torch_save(net, f'{dirname}/model.pkl')
         safe_torch_save(notnet, f'{dirname}/trainer.pkl')
 
-    def load(self, dirname: str, load_config: bool = False):
+    def load(self,
+             dirname: str,
+             load_config: bool = False,
+             config_overload: BaseConfig = None):
         """load the trainer's state including net, opt, state"""
         if load_config:
             try:
                 self.conf.load(f'{dirname}/config.json')
+                if config_overload is not None:
+                    self.conf.inherit(config_overload)
                 # need to reinit the models and optimizers
                 # due to possible config changes
                 self.init_net_and_opt()
