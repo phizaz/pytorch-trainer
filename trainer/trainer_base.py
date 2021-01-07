@@ -164,13 +164,16 @@ class BaseTrainer(LooperInterface):
         safe_torch_save(net, f'{dirname}/model.pkl')
         safe_torch_save(notnet, f'{dirname}/trainer.pkl')
 
-    def load(self, dirname: str, load_config: bool = True):
+    def load(self, dirname: str, load_config: bool = False):
         """load the trainer's state including net, opt, state"""
         if load_config:
-            self.conf.load(f'{dirname}/config.json')
-            # need to reinit the models and optimizers
-            # due to possible config changes
-            self.init_net_and_opt()
+            try:
+                self.conf.load(f'{dirname}/config.json')
+                # need to reinit the models and optimizers
+                # due to possible config changes
+                self.init_net_and_opt()
+            except Exception as e:
+                print(f'cannot load config file', e)
 
         if dirname[-4:] == '.pkl':
             # this is old version, loads the whole state
