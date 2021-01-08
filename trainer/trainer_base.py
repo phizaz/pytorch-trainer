@@ -167,18 +167,15 @@ class BaseTrainer(LooperInterface):
     def load(self,
              dirname: str,
              load_config: bool = False,
-             config_overload: BaseConfig = None):
+             config_overload: dict = None):
         """load the trainer's state including net, opt, state"""
         if load_config:
-            try:
-                self.conf.load(f'{dirname}/config.json')
-                if config_overload is not None:
-                    self.conf.inherit(config_overload)
-                # need to reinit the models and optimizers
-                # due to possible config changes
-                self.init_net_and_opt()
-            except Exception as e:
-                print(f'cannot load config file', e)
+            self.conf.load(f'{dirname}/config.json')
+            if config_overload is not None:
+                self.conf.__dict__.update(config_overload)
+            # need to reinit the models and optimizers
+            # due to possible config changes
+            self.init_net_and_opt()
 
         if dirname[-4:] == '.pkl':
             # this is old version, loads the whole state
