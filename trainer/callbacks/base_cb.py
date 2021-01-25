@@ -359,13 +359,15 @@ class TensorboardCb(Callback):
         if self.writer is not None:
             self.writer.close()
 
+
 def get_val_from_statcbs(key, callbacks):
     for cb in callbacks:
         if isinstance(cb, StatsCallback):
             if key in cb.stats:
                 v = cb.stats[key]
                 return v
-    raise NotImplementedError(f'{key} not found')
+    raise ValueError(f'{key} not found')
+
 
 def _get_val(v):
     """get val from a function or a value"""

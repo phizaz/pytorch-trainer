@@ -20,31 +20,49 @@ class LRSchedulerCb(Callback):
     Args:
         lr_fn: learning rate function (p, i, i_ep, loss) -> (float, None); None to ignore.
     """
-    def __init__(self, lr_fn, **kwargs):
+    def __init__(self,
+                 lr_fn,
+                 n_cycle_itr=1,
+                 n_cycle_ep=None,
+                 loss_key='loss',
+                 **kwargs):
         super().__init__(**kwargs)
         self.lr_fn = lr_fn
+        assert n_cycle_itr is not None or n_cycle_ep is not None, f'need to specify the cycle'
+        self.n_cycle_itr = n_cycle_itr
+        self.n_cycle_ep = n_cycle_ep
+        self.loss_key = loss_key
+
+    def on_train_begin(self, n_ep_itr, **kwargs):
+        super().on_train_begin(n_ep_itr=n_ep_itr, **kwargs)
+        if self.n_cycle_itr is None:
+            self.n_cycle_itr = self.n_cycle_ep * n_ep_itr
 
     def on_step_begin(self, trainer, n_max_itr, i_itr, n_ep_itr, callbacks,
                       **kwargs):
-        loss = get_val_from_statcbs('loss', callbacks)
-        # f_ep should start from 0.00 and is float
-        f_ep = i_itr / n_ep_itr
-        n_max_ep = n_max_itr / n_ep_itr
-        scale = self.lr_fn(
-            p=i_itr / n_max_itr,
-            i=i_itr,
-            n_max_itr=n_max_itr,
-            f_ep=f_ep,
-            n_max_ep=n_max_ep,
-            loss=loss,
-        )
-        # only care the float scales
-        if isinstance(scale, (int, float)):
-            for g in trainer.opt.param_groups:
-                assert 'lr' in g, "the optimizer doesn't seed to have the lr option"
-                if 'base_lr' not in g:
-                    g['base_lr'] = g['lr']
-                g['lr'] = g['base_lr'] * scale
+        if i_itr % self.n_cycle_itr == 0:
+            try:
+                loss = get_val_from_statcbs(self.loss_key, callbacks)
+            except ValueError:
+                loss = None
+            # f_ep should start from 0.00 and is float
+            f_ep = i_itr / n_ep_itr
+            n_max_ep = n_max_itr / n_ep_itr
+            scale = self.lr_fn(
+                p=i_itr / n_max_itr,
+                i=i_itr,
+                n_max_itr=n_max_itr,
+                f_ep=f_ep,
+                n_max_ep=n_max_ep,
+                loss=loss,
+            )
+            # only care the float scales
+            if isinstance(scale, (int, float)):
+                for g in trainer.opt.param_groups:
+                    assert 'lr' in g, "the optimizer doesn't seed to have the lr option"
+                    if 'base_lr' not in g:
+                        g['base_lr'] = g['lr']
+                    g['lr'] = g['base_lr'] * scale
 
 
 class LRReducePlateauCb(Callback):
@@ -56,8 +74,8 @@ class LRReducePlateauCb(Callback):
     """
     def __init__(self,
                  key,
+                 mode,
                  n_cycle=None,
-                 mode='max',
                  patience=10,
                  factor=0.2,
                  **kwargs):

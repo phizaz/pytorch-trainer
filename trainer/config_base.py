@@ -37,9 +37,14 @@ class BaseConfig:
             conf = json.load(f)
         self.from_dict(conf)
 
-    def from_dict(self, dict):
+    def from_dict(self, dict, strict=False):
         for k, v in dict.items():
-            assert hasattr(self, k), f"loading extra '{k}'"
+            if not hasattr(self, k):
+                if strict:
+                    raise ValueError(f"loading extra '{k}'")
+                else:
+                    print(f"loading extra '{k}'")
+                    continue
             if isinstance(self.__dict__[k], BaseConfig):
                 self.__dict__[k].from_dict(v)
             else:
