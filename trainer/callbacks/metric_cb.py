@@ -108,17 +108,17 @@ class AUROCCb(CollectCb):
     """
     def __init__(
             self,
-            cls=None,
+            keys,
+            cls_ids=None,
             apply_sigmoid=True,
-            cls_names=None,
-            keys=('pred', 'y'),
+            cls_id_to_name=None,
     ):
         # collect 'pred' and 'y'
         super().__init__(keys=keys)
         self.keys = keys
         self.sigmoid = apply_sigmoid
-        self.cls = cls
-        self.cls_names = cls_names
+        self.cls_ids = cls_ids
+        self.cls_id_to_name = cls_id_to_name
 
     def on_ep_end(self, buffer, i_itr, **kwargs):
         pred = buffer[self.keys[0]]
@@ -128,10 +128,10 @@ class AUROCCb(CollectCb):
 
         if self.sigmoid:
             pred = torch.sigmoid(pred)
-        if self.cls is not None:
-            pred = pred[:, self.cls]
-            y = y[:, self.cls]
-            idx = self.cls
+        if self.cls_ids is not None:
+            pred = pred[:, self.cls_ids]
+            y = y[:, self.cls_ids]
+            idx = self.cls_ids
         else:
             idx = list(range(y.shape[1]))
 
@@ -142,20 +142,20 @@ class AUROCCb(CollectCb):
             aurocs[i] = roc_auc_score(y[:, i], pred[:, i])
             support[i] = y[:, i].sum()
         total = sum(support[i] for i in idx)
-        micro = sum(aurocs[i] * support[i] / total for i in idx)
+        weighted = sum(aurocs[i] * support[i] / total for i in idx)
         macro = np.array([aurocs[i] for i in idx]).mean()
 
         bar = {
             'i_itr': i_itr,
-            'auroc_micro': micro,
+            'auroc_weighted': weighted,
             'auroc_macro': macro,
         }
         self.add_to_bar_and_hist(bar)
 
-        if self.cls_names is None:
+        if self.cls_id_to_name is None:
             info = {f'auroc_{i}': aurocs[i] for i in idx}
         else:
-            info = {f'auroc_{self.cls_names[i]}': aurocs[i] for i in idx}
+            info = {f'auroc_{self.cls_id_to_name[i]}': aurocs[i] for i in idx}
         info['i_itr'] = i_itr
         self.add_to_hist(info)
         self._flush()
