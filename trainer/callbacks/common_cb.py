@@ -75,14 +75,16 @@ class LRReducePlateauCb(Callback):
     def __init__(self,
                  key,
                  mode,
-                 n_cycle=None,
+                 n_itr_cycle: int = None,
+                 n_ep_cycle: int = None,
                  patience=10,
                  factor=0.2,
                  **kwargs):
         super().__init__()
         self.scheduler = None
         self.key = key
-        self.n_cycle = n_cycle
+        self.n_itr_cycle = n_itr_cycle
+        self.n_ep_cycle = n_ep_cycle
         self.mode = mode
         self.patience = patience
         self.factor = factor
@@ -103,9 +105,12 @@ class LRReducePlateauCb(Callback):
     # should load before resume
     @set_order(0)
     def on_train_begin(self, trainer, n_ep_itr, **kwargs):
-        if self.n_cycle is None:
-            # set default to 1 epoch
-            self.n_cycle = n_ep_itr
+        if self.n_itr_cycle is None:
+            if self.n_ep_cycle is not None:
+                self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+            else:
+                # default to 1 ep
+                self.n_itr_cycle = n_ep_itr
 
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             trainer.opt,
@@ -116,7 +121,7 @@ class LRReducePlateauCb(Callback):
         )
 
     def on_batch_end(self, callbacks, i_itr, **kwargs):
-        if i_itr % self.n_cycle == 0:
+        if i_itr % self.n_itr_cycle == 0:
             # getting the key value from the stats
             v = get_val_from_statcbs(self.key, callbacks)
             self.scheduler.step(v)
