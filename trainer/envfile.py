@@ -7,6 +7,7 @@ from typing import List
 class Env:
     cuda: List[int] = None
     global_lock: int = None
+    num_workers: int = None
 
     @classmethod
     def from_json(cls, path):
