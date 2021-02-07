@@ -7,28 +7,27 @@ from contextlib import ContextDecorator
 
 from .envfile import ENV
 
+
 def global_lock(n=None, delay=3.0, verbose=True, enable=True):
     """using a global lock file shared across the user"""
     if n is None:
         n = ENV.global_lock
 
     if enable:
-        return FileLock(
-            None,
-            path=os.path.expanduser('~/mlkit.lock'),
-            n=n,
-            delay=delay,
-            verbose=verbose
-        )
+        return FileLock(None,
+                        path=os.path.expanduser('~/mlkit.lock'),
+                        n=n,
+                        delay=delay,
+                        verbose=verbose)
     else:
         return nullcontext()
 
-def wait_global_lock(n=mp.cpu_count(), delay=3.0, verbose=True):
+
+def wait_global_lock(n=None, delay=3.0, verbose=True, enable=True):
     """wait for at least one of the locks to be available but not acquiring it"""
-    with FileLock(
-        None, path=os.path.expanduser('~/mlkit.lock'), n=n, delay=delay, verbose=verbose
-    ):
-        pass
+    with global_lock(n=n, delay=delay, verbose=verbose, enable=enable):
+        return
+
 
 @contextlib.contextmanager
 def nullcontext():
@@ -39,11 +38,14 @@ def nullcontext():
 
     yield NullCls()
 
+
 def nullfn(*args, **kwargs):
     pass
 
+
 class FileLockException(Exception):
     pass
+
 
 class FileLock(ContextDecorator):
     """ A file locking mechanism that has context-manager support so 
@@ -51,6 +53,9 @@ class FileLock(ContextDecorator):
         compatible as it doesn't rely on msvcrt or fcntl for the locking.
         
         From: https://github.com/dmfrey/FileLock/blob/master/filelock/filelock.py
+
+    Args:
+        n: number of total lock files
     """
     def __init__(self, file_name, n=1, delay=1.0, verbose=True, path=None):
         self.is_locked = False
@@ -58,8 +63,8 @@ class FileLock(ContextDecorator):
         def lockfile_path(i):
             if path is None:
                 return os.path.join(
-                    os.getcwd(), f'{file_name}.lock.{i}'
-                )  # use working directory
+                    os.getcwd(),
+                    f'{file_name}.lock.{i}')  # use working directory
             else:
                 return f'{path}.{i}'
 
@@ -73,7 +78,8 @@ class FileLock(ContextDecorator):
         while True:
             for lockfile in self.all_lockfiles:
                 try:
-                    self.fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                    self.fd = os.open(lockfile,
+                                      os.O_CREAT | os.O_EXCL | os.O_RDWR)
                     self.lockfile = lockfile
                     self.is_locked = True
                     if self.verbose: print(f'Lockfile {lockfile} acquired')
@@ -118,6 +124,7 @@ class FileLock(ContextDecorator):
             lying around.
         """
         self.release()
+
 
 if __name__ == "__main__":
 
