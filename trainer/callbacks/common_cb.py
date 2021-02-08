@@ -148,6 +148,12 @@ class WeightPolyakCb(Callback):
         nn.utils.vector_to_parameters(new_w, trainer.net.parameters())
         self.w = None
 
+class GracefulException(Exception):
+    pass
+
+class TerminateLRException(GracefulException):
+    pass
+
 
 class TerminateLRCb(Callback):
     def __init__(self, lr_thresh, begin=0):
@@ -159,8 +165,12 @@ class TerminateLRCb(Callback):
         if i_itr >= self.begin:
             lr = trainer.opt.param_groups[0]['lr']
             if lr <= self.lr_thresh:
-                raise KeyboardInterrupt(
+                raise TerminateLRException(
                     f'terminated because lr {lr} <= {self.lr_thresh}')
+
+
+class EarlyStopException(GracefulException):
+    pass
 
 
 class EarlyStopCb(Callback):
@@ -212,7 +222,7 @@ class EarlyStopCb(Callback):
                 )
                 print(f'early stop: gap {self.i - self.best_i}')
             if self.i - self.best_i > self.patience:
-                raise KeyboardInterrupt('early stop')
+                raise EarlyStopException('early stop')
 
 
 class StopAnyTimeCb(Callback):
@@ -226,6 +236,8 @@ class StopAnyTimeCb(Callback):
             # cannot suppress errors
             return False
 
+class AutoInterruptException(GracefulException):
+    pass
 
 class AutoInterrupt(Callback):
     """raises a KeyboardInterrupt at n_itr, useful for playing around."""
@@ -236,4 +248,4 @@ class AutoInterrupt(Callback):
     def on_batch_begin(self, i_itr, **kwargs):
         # this will allow for the validate to end from the last itr
         if i_itr >= self.n_itr:
-            raise KeyboardInterrupt()
+            raise AutoInterruptException(f'auto interrupt at i_itr = {self.n_itr}')
