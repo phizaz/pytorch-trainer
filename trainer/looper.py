@@ -123,6 +123,7 @@ class Looper:
         except GracefulException:
             # graceful stop, no real problem
             self('on_ep_end')
+            raise
         except KeyboardInterrupt:
             self('on_ep_end')
             raise
@@ -139,6 +140,9 @@ class Looper:
             self('on_train_begin')
             while self.state['i_itr'] < self.n_max_itr:
                 self.one_epoch(self.loader)
+            self('on_train_end')
+        except GracefulException:
+            print('graceful exception')
             self('on_train_end')
         except KeyboardInterrupt as e:
             # run the train_end before exiting (saving etc.)
