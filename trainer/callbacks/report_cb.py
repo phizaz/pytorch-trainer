@@ -1,16 +1,48 @@
+import sys
 import time
+import uuid
 from collections import deque
+from contextlib import contextmanager
+from datetime import datetime
+
 from trainer.average import SMA
 
-from ..loader_base import BaseLoaderWrapper
 from ..csv import *
+from ..loader_base import BaseLoaderWrapper
 from ..params_grads import *
 from ..tqdm import *
 from .base_cb import *
-import sys
 
-import uuid
-from datetime import datetime
+
+@contextmanager
+def redirect_to_file(dirname='logs',
+                     mode='w',
+                     redirect_stderr=True,
+                     redirect_stdout=True):
+    if redirect_stderr:
+        old_stderr = sys.stderr
+    if redirect_stdout:
+        old_stdout = sys.stdout
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+    now = datetime.now()
+    rand = uuid.uuid4().hex
+    date_time = now.strftime("%m-%d-%Y_%H:%M:%S")
+    path = os.path.join(dirname, f'log_{date_time}_{rand[:5]}.txt')
+    print(f'logging stderr to {path} ...')
+    # change the std
+    file = open(path, mode)
+    if redirect_stderr:
+        sys.stderr = file
+    if redirect_stdout:
+        sys.stdout = file
+
+    yield
+
+    if redirect_stderr:
+        sys.stderr = old_stderr
+    if redirect_stdout:
+        sys.stdout = old_stdout
 
 
 class ReportItrCb(BoardCallback):
@@ -20,57 +52,6 @@ class ReportItrCb(BoardCallback):
             'f_ep': f_ep,
         })
         self.add_to_hist({'i_itr': i_itr, 'i_ep': i_ep, '%ep': p_ep})
-
-
-class RedirectStd(Callback):
-    def __init__(self,
-                 dirname,
-                 mode='w',
-                 redirect_stderr=True,
-                 redirect_stdout=True):
-        super().__init__()
-        self.old_stderr = None
-        self.old_stdout = None
-        self.dirname = dirname
-        self.mode = mode
-        self.redirect_stderr = redirect_stderr
-        self.redirect_stdout = redirect_stdout
-
-    def on_train_begin(self, **kwargs):
-        # backup the stds
-        if self.redirect_stderr:
-            self.old_stderr = sys.stderr
-        if self.redirect_stdout:
-            self.old_stdout = sys.stdout
-        if not os.path.exists(self.dirname):
-            os.makedirs(self.dirname)
-        now = datetime.now()
-        rand = uuid.uuid4().hex
-        date_time = now.strftime("%m-%d-%Y_%H:%M:%S")
-        path = os.path.join(self.dirname, f'log_{date_time}_{rand[:5]}.txt')
-        print(f'logging stderr to {path} ...')
-        # change the std
-        file = open(path, self.mode)
-        if self.redirect_stderr:
-            sys.stderr = file
-        if self.redirect_stdout:
-            sys.stdout = file
-
-        return super().on_train_begin(**kwargs)
-
-    def on_train_end(self, **kwargs):
-        if self.redirect_stderr:
-            sys.stderr = self.old_stderr
-        if self.redirect_stdout:
-            sys.stdout = self.old_stdout
-        return super().on_train_end(**kwargs)
-
-    def on_abrupt_end(self, **kwargs):
-        if self.redirect_stderr:
-            sys.stderr = self.old_stderr
-        if self.redirect_stdout:
-            sys.stdout = self.old_stdout
-        return super().on_abrupt_end(**kwargs)
 
 
 class ProgressCb(Callback):
