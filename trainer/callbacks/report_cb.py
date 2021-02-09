@@ -22,16 +22,26 @@ class ReportItrCb(BoardCallback):
         self.add_to_hist({'i_itr': i_itr, 'i_ep': i_ep, '%ep': p_ep})
 
 
-class RedirectStdErr(Callback):
-    def __init__(self, dirname, mode='w'):
+class RedirectStd(Callback):
+    def __init__(self,
+                 dirname,
+                 mode='w',
+                 redirect_stderr=True,
+                 redirect_stdout=True):
         super().__init__()
         self.old_stderr = None
+        self.old_stdout = None
         self.dirname = dirname
         self.mode = mode
+        self.redirect_stderr = redirect_stderr
+        self.redirect_stdout = redirect_stdout
 
     def on_train_begin(self, **kwargs):
-        # backup
-        self.old_stderr = sys.stderr
+        # backup the stds
+        if self.redirect_stderr:
+            self.old_stderr = sys.stderr
+        if self.redirect_stdout:
+            self.old_stdout = sys.stdout
         if not os.path.exists(self.dirname):
             os.makedirs(self.dirname)
         now = datetime.now()
@@ -39,16 +49,27 @@ class RedirectStdErr(Callback):
         date_time = now.strftime("%m-%d-%Y_%H:%M:%S")
         path = os.path.join(self.dirname, f'log_{date_time}_{rand[:5]}.txt')
         print(f'logging stderr to {path} ...')
-        sys.stderr = open(path, self.mode)
+        # change the std
+        file = open(path, self.mode)
+        if self.redirect_stderr:
+            sys.stderr = file
+        if self.redirect_stdout:
+            sys.stdout = file
 
         return super().on_train_begin(**kwargs)
 
     def on_train_end(self, **kwargs):
-        sys.stderr = self.old_stderr
+        if self.redirect_stderr:
+            sys.stderr = self.old_stderr
+        if self.redirect_stdout:
+            sys.stdout = self.old_stdout
         return super().on_train_end(**kwargs)
 
     def on_abrupt_end(self, **kwargs):
-        sys.stderr = self.old_stderr
+        if self.redirect_stderr:
+            sys.stderr = self.old_stderr
+        if self.redirect_stdout:
+            sys.stdout = self.old_stdout
         return super().on_abrupt_end(**kwargs)
 
 
