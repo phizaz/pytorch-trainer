@@ -3,13 +3,22 @@ from multiprocessing import get_context
 from tqdm.autonotebook import tqdm
 
 
-def multiprocess_map(fn, args, num_workers: int, progress: bool = False):
-    with Pool(num_workers) as pool:
-        iter = pool.imap(_call_fn_under_process, [(fn, arg) for arg in args])
-        if progress:
-            iter = tqdm(iter, total=len(args))
-        for each in iter:
-            pass
+def multiprocess_map(fn,
+                     args,
+                     num_workers: int,
+                     progress: bool = False,
+                     debug: bool = False):
+    if debug:
+        for each in [(fn, arg) for arg in args]:
+            _call_fn_under_process(each)
+    else:
+        with Pool(num_workers) as pool:
+            iter = pool.imap(_call_fn_under_process,
+                             [(fn, arg) for arg in args])
+            if progress:
+                iter = tqdm(iter, total=len(args))
+            for each in iter:
+                pass
 
 
 def _call_fn_under_process(fn_arg):
