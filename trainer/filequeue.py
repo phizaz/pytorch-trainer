@@ -63,7 +63,6 @@ class FileQueue(ContextDecorator):
         return sorted(ids)
 
     def acquire(self):
-        if self.verbose: print('Acquiring for a lockfile')
         while True:
             # queing
             with self.has_right():
@@ -78,7 +77,7 @@ class FileQueue(ContextDecorator):
                                                  self.filename(next_id))
                     os.close(os.open(self.lockfile, os.O_CREAT))
                     if self.verbose:
-                        print(f'Lockfile {self.lockfile} acquired')
+                        print(f'Queue file {self.lockfile} acquired')
 
                 # activate
                 if self.lockfile is not None:
@@ -88,6 +87,8 @@ class FileQueue(ContextDecorator):
                     order = ids.index(our_id)
                     if order < self.n:
                         # locked
+                        if self.verbose:
+                            print(f'Queue {our_id} now runs ...')
                         self.is_locked = True
                         return
 
