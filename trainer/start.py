@@ -7,6 +7,7 @@ from .filelock import *
 from .filequeue import *
 from .loader import *
 from .loader_base import *
+from .logging import *
 from .multiprocess_map import *
 from .predictor_base import *
 from .predictor_validate import *
