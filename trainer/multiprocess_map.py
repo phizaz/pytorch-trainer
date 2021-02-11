@@ -13,8 +13,8 @@ def multiprocess_map(fn,
             _call_fn_under_process(each)
     else:
         with Pool(num_workers) as pool:
-            iter = pool.imap(_call_fn_under_process,
-                             [(fn, arg) for arg in args])
+            iter = pool.imap_unordered(_call_fn_under_process,
+                                       [(fn, arg) for arg in args])
             if progress:
                 iter = tqdm(iter, total=len(args))
             for each in iter:

@@ -10,10 +10,12 @@ def global_queue(n=None,
                  delay=3.0,
                  verbose=True,
                  enable=True,
-                 namespace: str = ''):
+                 namespace: str = None):
     """using a global lock file shared across the user"""
     if n is None:
         n = ENV.global_lock
+    if namespace is None:
+        namespace = ENV.namespace
 
     if enable:
         return FileQueue(n=n,
