@@ -5,6 +5,7 @@ from typing import List
 
 @dataclass
 class Env:
+    namespace: str = ''
     cuda: List[int] = None
     global_lock: int = None
     num_workers: int = None

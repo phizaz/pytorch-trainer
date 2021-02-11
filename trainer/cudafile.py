@@ -28,12 +28,12 @@ def get_alloc_right(verbose=False):
     """global allocation lock"""
     return FileLock(CUDA_ALLOC_FILE, delay=0.1, verbose=verbose)
 
-def list_cuda_locks():
+def list_cuda_locks(namespace: str = ''):
     # locks are mlkit.cuda{dev}.{i}
     dirname = os.path.expanduser('~')
     locks = defaultdict(list)
     for f in os.listdir(dirname):
-        if 'mlkit.cuda' in f:
+        if f'mlkit{namespace}.cuda' in f:
             _, dev, i = f.split('.')
             dev = int(dev[4:])  # from cuda*
             i = int(i)
@@ -41,7 +41,7 @@ def list_cuda_locks():
     return locks
 
 @contextlib.contextmanager
-def cuda_round_robin(devices=None, verbose=False, enable=True):
+def cuda_round_robin(devices=None, verbose=False, enable=True, namespace: str = ''):
     """
     Args:
         devices: list of ints
@@ -50,9 +50,15 @@ def cuda_round_robin(devices=None, verbose=False, enable=True):
     if devices is None:
         devices = CUDA_DEVICES
     if devices is None:
-        devices = ENV.cuda
+        if ENV.cuda is None:
+            # default is all devices
+            devices = range(torch.cuda.device_count())
+        else:
+            # using the envfile
+            devices = ENV.cuda
 
-    assert devices is not None and len(devices) > 0, "no device available"
+    if devices is None or len(devices) == 0:
+        raise AssertionError("no device available")
 
     if not enable:
         dev = f'cuda:{devices[0]}'
@@ -62,7 +68,7 @@ def cuda_round_robin(devices=None, verbose=False, enable=True):
         # get alloc rights
         with get_alloc_right(verbose=verbose):
             # count the cuda locks
-            locks = list_cuda_locks()
+            locks = list_cuda_locks(namespace=namespace)
             min_dev = None
             min_cnt = float('inf')
             for dev in devices:
@@ -75,7 +81,7 @@ def cuda_round_robin(devices=None, verbose=False, enable=True):
             dirname = os.path.expanduser('~')
             for i in count(start=0):
                 if i not in locks[min_dev]: break
-            fd, path = lockfile(os.path.join(dirname, f'mlkit.cuda{min_dev}.{i}'))
+            fd, path = lockfile(os.path.join(dirname, f'mlkit{namespace}.cuda{min_dev}.{i}'))
             if verbose: print(f'locked {path}')
 
         try:

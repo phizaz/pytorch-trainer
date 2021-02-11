@@ -6,13 +6,20 @@ from .envfile import ENV
 from .filelock import FileLock, nullcontext
 
 
-def global_queue(n=None, delay=3.0, verbose=True, enable=True):
+def global_queue(n=None,
+                 delay=3.0,
+                 verbose=True,
+                 enable=True,
+                 namespace: str = ''):
     """using a global lock file shared across the user"""
     if n is None:
         n = ENV.global_lock
 
     if enable:
-        return FileQueue(n=n, delay=delay, verbose=verbose)
+        return FileQueue(n=n,
+                         delay=delay,
+                         verbose=verbose,
+                         file_prefix=f'mlkit{namespace}.queue')
     else:
         return nullcontext()
 
