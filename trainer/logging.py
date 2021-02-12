@@ -12,7 +12,9 @@ def redirect_to_file(dirname='logs',
                      redirect_stdout=True,
                      enable=True):
     if not enable:
-        return nullcontext()
+        with nullcontext():
+            yield
+        return
 
     if redirect_stderr:
         old_stderr = sys.stderr
