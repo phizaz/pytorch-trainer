@@ -88,7 +88,7 @@ class AutoResumeCb(Callback):
 
     def on_abrupt_end(self, i_itr, trainer, callbacks, **kwargs):
         if self.save_abrupt_end:
-            if i_itr == self._get_latest_itr():
+            if i_itr <= self._get_latest_itr():
                 # do nothing, no need to save
                 return
             self._save(i_itr,
