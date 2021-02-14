@@ -77,19 +77,9 @@ class AutoResumeCb(Callback):
             self._save(i_itr, trainer, callbacks, **kwargs)
 
     def on_train_end(self, i_itr, trainer, callbacks, **kwargs):
-        if i_itr == self._get_latest_itr():
-            # do nothing, no need to save
-            return
-        self._save(i_itr, trainer, callbacks, ignore_history=True, **kwargs)
-
-        if self.return_best_model:
-            # load the best model at the end
-            self._load_best(trainer)
-
-    def on_abrupt_end(self, i_itr, trainer, callbacks, **kwargs):
-        if self.save_abrupt_end:
-            if i_itr <= self._get_latest_itr():
-                # abrupt end will not destroy the previous latest
+        if i_itr > 1:
+            # it must have something to save
+            if i_itr == self._get_latest_itr():
                 # do nothing, no need to save
                 return
             self._save(i_itr,
@@ -97,6 +87,24 @@ class AutoResumeCb(Callback):
                        callbacks,
                        ignore_history=True,
                        **kwargs)
+
+        if self.return_best_model:
+            # load the best model at the end
+            self._load_best(trainer)
+
+    def on_abrupt_end(self, i_itr, trainer, callbacks, **kwargs):
+        if self.save_abrupt_end:
+            if i_itr > 1:
+                # it must have something to save
+                last_itr = self._get_latest_itr()
+                if last_itr is not None and i_itr <= last_itr:
+                    # abrupt end will not destroy the latest dir
+                    return
+                self._save(i_itr,
+                           trainer,
+                           callbacks,
+                           ignore_history=True,
+                           **kwargs)
 
         if self.return_best_model:
             # load the best model at the end
