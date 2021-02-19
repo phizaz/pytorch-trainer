@@ -13,7 +13,7 @@ def global_queue(n=None,
                  namespace: str = None):
     """using a global lock file shared across the user"""
     if n is None:
-        n = ENV.global_lock
+        n = ENV.global_lock or 1
     if namespace is None:
         namespace = ENV.namespace
 
