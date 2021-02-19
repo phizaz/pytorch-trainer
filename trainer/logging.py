@@ -26,7 +26,7 @@ def redirect_to_file(dirname='logs',
     rand = uuid.uuid4().hex
     date_time = now.strftime("%m-%d-%Y_%H:%M:%S")
     path = os.path.join(dirname, f'log_{date_time}_{rand[:5]}.txt')
-    print(f'logging stderr to {path} ...')
+    print(f'logging to {path} ...')
     # change the std
     file = open(path, mode)
     if redirect_stderr:

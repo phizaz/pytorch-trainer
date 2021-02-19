@@ -1,14 +1,18 @@
-import os
 import json
+import multiprocessing as mp
+import os
 from dataclasses import dataclass
-from typing import List
+from typing import Tuple
+
+import torch
+
 
 @dataclass
 class Env:
     namespace: str = ''
-    cuda: List[int] = None
-    global_lock: int = None
-    num_workers: int = None
+    cuda: Tuple[int] = tuple(range(torch.cuda.device_count()))
+    global_lock: int = 1
+    num_workers: int = mp.cpu_count()
 
     @classmethod
     def from_json(cls, path):
@@ -20,11 +24,13 @@ class Env:
             new.__dict__[k] = v
         return new
 
+
 def read_env_file():
     for file in ENVFILES:
         if os.path.exists(file):
             return Env.from_json(file)
     return Env()
+
 
 ENVFILES = [
     'mlkitenv.json',

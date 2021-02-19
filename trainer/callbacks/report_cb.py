@@ -2,12 +2,15 @@ import time
 from collections import deque
 
 from trainer.average import SMA
+from tqdm.autonotebook import tqdm
 
 from ..csv import *
 from ..loader_base import BaseLoaderWrapper
 from ..params_grads import *
-from ..tqdm import *
 from .base_cb import *
+
+# hierarchy of tqdms
+TQDM = []
 
 
 class ReportItrCb(BoardCallback):
@@ -21,16 +24,11 @@ class ReportItrCb(BoardCallback):
 
 class ProgressCb(Callback):
     """call and collect stats from StatsCallback
-    
-    Args:
-        destroy: should destroy on train end? should be False with validate loop
-
     """
-    def __init__(self, desc='train', destroy=True, **kwargs):
+    def __init__(self, desc='train', **kwargs):
         super().__init__(**kwargs)
         self.desc = desc
         self.progress = None
-        self.destroy = destroy
 
     def update(self, callbacks, i_itr):
         """update the progress bar"""
@@ -52,28 +50,21 @@ class ProgressCb(Callback):
         self.progress.set_postfix(stats, refresh=False)
         self.progress.update(i_itr - self.progress.n)
 
-    def _same_tqdm(self, bar, n_max_itr, i_itr):
-        same = (bar.total == n_max_itr)  # and (bar.n == i_itr - 1)
-        return same
+    def on_train_begin(self, n_max_itr, **kwargs):
+        # minitirs = 1, means check the update every iteration (disable dynamic miniters)
+        # position = len(TQDM) # not friendly
+        position = 0  # friendly with logging to file
+        self.progress = tqdm(total=n_max_itr,
+                             position=position,
+                             desc=self.desc,
+                             mininterval=0.1,
+                             miniters=1)
+        TQDM.append(self.progress)
 
-    def on_batch_begin(self, i_itr, n_max_itr, **kwargs):
-        """create or reuse the progress bar"""
-        if has_default_tqdm():
-            self.progress = get_default_tqdm()
-        else:
-            from tqdm.autonotebook import tqdm
-
-            # minitirs = 1, means check the update every iteration (disable dynamic miniters)
-            self.progress = tqdm(total=n_max_itr, mininterval=0.1, miniters=1)
-            set_default_tqdm(self.progress)
-
-        # if not the same one, reset it
-        # this happens when the tdqm is used by the validator
-        # we need to reset first before re-purpose it to training
-        if not self._same_tqdm(self.progress, n_max_itr, i_itr):
-            self.progress.reset(n_max_itr)
-
-        self.progress.set_description(self.desc, refresh=False)
+    def close(self):
+        self.progress.close()
+        TQDM.remove(self.progress)
+        self.progress = None
 
     @set_order(1000)  # wait for stats
     def on_batch_end(self, callbacks, i_itr, **kwargs):
@@ -82,16 +73,11 @@ class ProgressCb(Callback):
     @set_order(1000)  # wait for stats
     def on_train_end(self, callbacks, i_itr, **kwargs):
         if self.progress is not None:
-            self.update(callbacks, i_itr)
-            if self.destroy:
-                self.progress.close()
-                set_default_tqdm(None)
+            self.close()
 
     def on_abrupt_end(self, **kwargs):
         if self.progress is not None:
-            if self.destroy:
-                self.progress.close()
-                set_default_tqdm(None)
+            self.close()
 
 
 class ReportLoaderStatsCb(StatsCallback):
@@ -203,10 +189,7 @@ class ReportWeightNormCb(BoardCallback):
 
 
 class ReportDeltaNormCb(BoardCallback):
-    def __init__(self,
-                 name='delta_norm',
-                 use_histogram=False,
-                 n=100,
+    def __init__(self, name='delta_norm', use_histogram=False, n=100,
                  **kwargs):
         super().__init__(**kwargs)
         self.name = name

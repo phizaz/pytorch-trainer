@@ -42,7 +42,7 @@ class ValidateCb(BoardCallback):
 
     def make_default_callbacks(self):
         return [
-            ProgressCb(self.name, destroy=False),
+            ProgressCb(self.name),
             ReportLoaderStatsCb(),
         ]
 

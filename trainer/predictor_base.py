@@ -1,6 +1,8 @@
-from .trainer_base import *
+import contextlib
+
 from .callbacks.metric_cb import *
 from .looper import *
+from .trainer_base import *
 
 
 class BasePredictor(LooperInterface):

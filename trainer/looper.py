@@ -1,11 +1,9 @@
-import contextlib
 from collections import defaultdict
 from trainer.callbacks.common_cb import GracefulException
 
 from torch.utils.data import DataLoader
 
 from .callbacks.base_cb import *
-from .tqdm import *
 from .types import *
 
 
@@ -77,7 +75,6 @@ class Looper:
             'n_max_itr': self.n_max_itr,
             'n_ep_itr': n_ep_itr,
             'callbacks': self.callbacks,
-            'progress': get_default_tqdm(),
             'i_ep': int(self.state['i_itr'] / n_ep_itr) + 1,
             'f_ep': self.state['i_itr'] / n_ep_itr,
             'p_ep': (self.state['i_itr'] % n_ep_itr) / n_ep_itr * 100,

@@ -5,7 +5,6 @@ from .callbacks.profiler_cb import *
 from .callbacks.report_cb import *
 from .config_base import *
 from .looper import *
-from .tqdm import *
 
 __all__ = ['BaseTrainer', 'BaseTrainerConfig']
 
@@ -23,21 +22,11 @@ class BaseTrainer(LooperInterface):
     def __init__(
             self,
             conf: BaseTrainerConfig,
-            callbacks=None,
     ):
         super().__init__()
         self.conf = conf
         self.net = None
         self.opt = None
-
-        if callbacks is None:
-            callbacks = self.make_default_callbacks()
-        self.callbacks = callbacks
-
-        # looper is the one who calls all the methods in this trainer
-        # looper supplies argument (also kwargs) into each method
-        self.looper = Looper(self, callbacks=callbacks)
-
         self.init_net_and_opt()
 
     def init_net_and_opt(self):
@@ -54,8 +43,7 @@ class BaseTrainer(LooperInterface):
     def device(self):
         return self.conf.device
 
-    @classmethod
-    def make_default_callbacks(cls):
+    def make_default_callbacks(self):
         return [
             ProgressCb(),
             ReportItrCb(),
@@ -113,12 +101,14 @@ class BaseTrainer(LooperInterface):
             loader: DataLoader,
             n_max_itr: int = None,
             n_max_ep: int = None,
+            callbacks=None,
     ) -> pd.DataFrame:
         """
         Args: 
             loader: data loader
             n_max_itr: number of iterations before terminate, None means using n_max_ep instead
             n_max_ep: number of epochs before terminate, None means using n_max_itr instead
+            callbacks: 
         """
         if n_max_itr is None:
             assert n_max_ep is not None, 'either n_max_itr or n_max_ep must be present'
@@ -126,8 +116,15 @@ class BaseTrainer(LooperInterface):
         else:
             assert n_max_ep is None, 'the supplied n_max_ep has no effect'
 
+        if callbacks is None:
+            callbacks = self.make_default_callbacks()
+
+        # looper is the one who calls all the methods in this trainer
+        # looper supplies argument (also kwargs) into each method
+        looper = Looper(self, callbacks=callbacks)
+
         # loop
-        self.looper.loop(loader=loader, n_max_itr=n_max_itr)
+        looper.loop(loader=loader, n_max_itr=n_max_itr)
         # collect the stats
         df = StatsCallback.combine_callbacks(self.callbacks)
         return df
