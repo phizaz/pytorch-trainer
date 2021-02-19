@@ -126,7 +126,7 @@ class BaseTrainer(LooperInterface):
         # loop
         looper.loop(loader=loader, n_max_itr=n_max_itr)
         # collect the stats
-        df = StatsCallback.combine_callbacks(self.callbacks)
+        df = StatsCallback.combine_callbacks(callbacks)
         return df
 
     def get_state(self):

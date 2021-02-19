@@ -5,9 +5,11 @@ from tqdm.autonotebook import tqdm
 
 def multiprocess_map(fn,
                      args,
-                     num_workers: int,
+                     num_workers: int = None,
                      progress: bool = False,
                      debug: bool = False):
+    if num_workers is None:
+        num_workers = len(args)
     if debug:
         for each in [(fn, arg) for arg in args]:
             _call_fn_under_process(each)
