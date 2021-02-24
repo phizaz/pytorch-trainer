@@ -155,7 +155,10 @@ class AUROCCb(CollectCb):
         support = dict()
         for i in idx:
             select = y[:, i] != -100
-            aurocs[i] = roc_auc_score(y[select, i], pred[select, i])
+            try:
+                aurocs[i] = roc_auc_score(y[select, i], pred[select, i])
+            except ValueError:
+                aurocs[i] = float('nan')
             support[i] = y[select, i].sum()
         total = sum(support[i] for i in idx)
         weighted = sum(aurocs[i] * support[i] / total for i in idx)
