@@ -2,31 +2,36 @@ import os
 
 from pandas import DataFrame
 import pandas as pd
+import csv
 
 from tqdm.autonotebook import tqdm
 
+
 class FastCSVWriter:
-    def __init__(self, path, mode='w'):
+    def __init__(self, path, mode='w', quoting=csv.QUOTE_MINIMAL):
         dirname = os.path.dirname(path)
         if dirname != '' and not os.path.exists(dirname):
             os.makedirs(dirname)
 
         self.path = path
         self.f = open(path, mode)
+        self.quoting = quoting
+        self.writer = csv.writer(self.f, quoting=self.quoting)
         self.keys = []
 
     def write_head(self, keys):
         assert len(self.keys) == 0, "keys are already defined"
         self.keys = keys
-        self.f.write(','.join(keys) + '\n')
+        # self.f.write(','.join(keys) + '\n')
+        self.writer.writerow(keys)
 
     def write_row(self, values):
         """row is a list of values matching the predifined keys"""
         assert len(values) == len(
-            self.keys
-        ), "values are not consistent with predefined keys"
-        s = ','.join(str(v) for v in values) + '\n'
-        self.f.write(s)
+            self.keys), "values are not consistent with predefined keys"
+        # s = ','.join(str(v) for v in values) + '\n'
+        # self.f.write(s)
+        self.writer.writerow(values)
 
     def write_df(self, df: DataFrame, progress=True):
         """write a dataframe to file"""
@@ -57,6 +62,7 @@ class FastCSVWriter:
                 self.keys = []
                 # open the file again write mode
                 self.f = open(self.path, 'w')
+                self.writer = csv.writer(self.f, quoting=self.quoting)
                 # write the data frame to the file
                 self.write_df(df, progress=False)
 
