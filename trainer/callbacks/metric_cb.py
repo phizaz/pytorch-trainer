@@ -112,6 +112,8 @@ class AUROCCb(CollectCb):
             cls_ids=None,
             apply_sigmoid=True,
             cls_id_to_name=None,
+            pos_label=1,
+            neg_label=0,
     ):
         # collect 'pred' and 'y'
         super().__init__(keys=keys)
@@ -119,12 +121,25 @@ class AUROCCb(CollectCb):
         self.sigmoid = apply_sigmoid
         self.cls_ids = cls_ids
         self.cls_id_to_name = cls_id_to_name
+        self.pos_label = pos_label
+        self.neg_label = neg_label
 
     def on_ep_end(self, buffer, i_itr, **kwargs):
         pred = buffer[self.keys[0]]
-        y = buffer[self.keys[1]]
+        y = buffer[self.keys[1]].long()
         assert isinstance(pred, Tensor), 'you forgot to tensorify pred'
         assert isinstance(y, Tensor), 'you forgot to tensorify y'
+
+        # y = {-100, 0, 1}
+        y = torch.where(
+            y == self.pos_label,
+            torch.ones_like(y),
+            torch.where(
+                y == self.neg_label,
+                torch.zeros_like(y),
+                -100 * torch.ones_like(y),
+            ),
+        )
 
         if self.sigmoid:
             pred = torch.sigmoid(pred)
@@ -139,8 +154,9 @@ class AUROCCb(CollectCb):
         aurocs = dict()
         support = dict()
         for i in idx:
-            aurocs[i] = roc_auc_score(y[:, i], pred[:, i])
-            support[i] = y[:, i].sum()
+            select = y[:, i] != -100
+            aurocs[i] = roc_auc_score(y[select, i], pred[select, i])
+            support[i] = y[select, i].sum()
         total = sum(support[i] for i in idx)
         weighted = sum(aurocs[i] * support[i] / total for i in idx)
         macro = np.array([aurocs[i] for i in idx]).mean()
