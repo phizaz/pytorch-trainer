@@ -130,7 +130,7 @@ class AUROCCb(CollectCb):
         assert isinstance(pred, Tensor), 'you forgot to tensorify pred'
         assert isinstance(y, Tensor), 'you forgot to tensorify y'
 
-        # y = {-100, 0, 1}
+        # y = {-100, 0, 1}; -100 = missing labels
         y = torch.where(
             y == self.pos_label,
             torch.ones_like(y),
@@ -153,16 +153,21 @@ class AUROCCb(CollectCb):
         # aurocs
         aurocs = dict()
         support = dict()
+        ignored = []
         for i in idx:
+            # ignore missing labels
             select = y[:, i] != -100
             try:
                 aurocs[i] = roc_auc_score(y[select, i], pred[select, i])
             except ValueError:
+                ignored.append(i)
                 aurocs[i] = float('nan')
             support[i] = y[select, i].sum()
-        total = sum(support[i] for i in idx)
-        weighted = sum(aurocs[i] * support[i] / total for i in idx)
-        macro = np.array([aurocs[i] for i in idx]).mean()
+        # calculate only not ignored classes
+        total = sum(support[i] for i in idx if i not in ignored)
+        weighted = sum(aurocs[i] * support[i] / total for i in idx
+                       if i not in ignored)
+        macro = np.array([aurocs[i] for i in idx if i not in ignored]).mean()
 
         bar = {
             'i_itr': i_itr,
