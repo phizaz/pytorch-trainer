@@ -6,6 +6,7 @@ import torch
 
 from .loader_base import BaseLoaderWrapper
 
+
 class Prefetcher(BaseLoaderWrapper):
     """prefetch data from the loader, it will automatically restart the loader
     doesn't work with pin_memory=True"""
@@ -70,6 +71,7 @@ class Prefetcher(BaseLoaderWrapper):
                 break
             yield data
 
+
 class StoppableThread(th.Thread):
     """
     A thread that has a 'stop' event.
@@ -96,22 +98,23 @@ class StoppableThread(th.Thread):
         """
         return self._stop_evt.isSet()
 
-    def queue_put_stoppable(self, q, obj):
+    def queue_put_stoppable(self, q, obj, timeout=1):
         """ Put obj to queue, but will give up when the thread is stopped"""
         while not self.stopped():
             try:
-                q.put(obj, timeout=5)
+                q.put(obj, timeout=timeout)
                 break
             except queue.Full:
                 pass
 
-    def queue_get_stoppable(self, q):
+    def queue_get_stoppable(self, q, timeout):
         """ Take obj from queue, but will give up when the thread is stopped"""
         while not self.stopped():
             try:
-                return q.get(timeout=5)
+                return q.get(timeout=timeout)
             except queue.Empty:
                 pass
+
 
 class PrefetcherThread(BaseLoaderWrapper):
     """prefetch data from the loader, 
@@ -144,9 +147,10 @@ class PrefetcherThread(BaseLoaderWrapper):
             finally:
                 self.stop()
 
-    def __init__(self, loader, n_prefetch):
+    def __init__(self, loader, n_prefetch, device):
         super().__init__(loader)
         self.q = queue.Queue(maxsize=n_prefetch)
+        self.device = device
         self.worker = None
         self._stats = {}
 
@@ -155,8 +159,7 @@ class PrefetcherThread(BaseLoaderWrapper):
 
     def __iter__(self):
         self.worker = PrefetcherThread.Worker(
-            self.loader, self.q, device=torch.cuda.current_device()
-        )
+            self.loader, self.q, device=self.device)
         self.worker.start()
         while True:
             self._stats['prefetch'] = self.q.qsize()
