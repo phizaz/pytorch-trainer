@@ -183,3 +183,63 @@ class AUROCCb(CollectCb):
         info['i_itr'] = i_itr
         self.add_to_hist(info)
         self._flush()
+
+
+def auroc_report(pred: Tensor,
+                 y: Tensor,
+                 pos_label,
+                 neg_label,
+                 sigmoid=False,
+                 cls_ids=None,
+                 cls_id_to_name=None):
+    # y = {-100, 0, 1}; -100 = missing labels
+    y = torch.where(
+        y == pos_label,
+        torch.ones_like(y),
+        torch.where(
+            y == neg_label,
+            torch.zeros_like(y),
+            -100 * torch.ones_like(y),
+        ),
+    )
+
+    if sigmoid:
+        pred = torch.sigmoid(pred)
+    if cls_ids is not None:
+        pred = pred[:, cls_ids]
+        y = y[:, cls_ids]
+    else:
+        cls_ids = list(range(y.shape[1]))
+
+    idx = list(range(y.shape[1]))
+
+    # aurocs
+    aurocs = dict()
+    support = dict()
+    ignored = []
+    for i in idx:
+        # ignore missing labels
+        select = y[:, i] != -100
+        try:
+            aurocs[i] = roc_auc_score(y[select, i], pred[select, i])
+        except ValueError:
+            # ignore classes that are not calculable
+            ignored.append(i)
+            aurocs[i] = float('nan')
+        support[i] = y[select, i].sum().item()
+    # calculate only not ignored classes
+    total = sum(support[i] for i in idx if i not in ignored)
+    weighted = sum(aurocs[i] * support[i] / total for i in idx
+                   if i not in ignored)
+    macro = np.array([aurocs[i] for i in idx if i not in ignored]).mean()
+
+    out = {
+        'weighted': weighted,
+        'macro': macro,
+    }
+    if cls_id_to_name is None:
+        info = {f'{cls_ids[i]}': aurocs[i] for i in idx}
+    else:
+        info = {f'{cls_id_to_name[cls_ids[i]]}': aurocs[i] for i in idx}
+    out.update(info)
+    return out
