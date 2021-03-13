@@ -22,7 +22,7 @@ class ValidateCb(BoardCallback):
             callbacks=None,
             name: str = 'val',
             n_itr_cycle: int = None,
-            n_ep_cycle: int = None,
+            n_ep_cycle: float = None,
             on_end=False,
             predictor_cls=ValidatePredictor,
     ):
@@ -50,7 +50,7 @@ class ValidateCb(BoardCallback):
         super().on_train_begin(n_ep_itr=n_ep_itr, **kwargs)
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
-                self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+                self.n_itr_cycle = int(self.n_ep_cycle * n_ep_itr)
             else:
                 # default to 1 ep
                 self.n_itr_cycle = n_ep_itr

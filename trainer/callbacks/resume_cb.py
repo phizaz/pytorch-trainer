@@ -22,7 +22,7 @@ class AutoResumeCb(Callback):
             self,
             dirname: str,
             n_itr_cycle: int = None,
-            n_ep_cycle: int = None,
+            n_ep_cycle: float = None,
             resume: bool = True,
             resume_from='last',
             n_keep: int = 0,
@@ -64,7 +64,7 @@ class AutoResumeCb(Callback):
     def on_train_begin(self, trainer, callbacks, n_ep_itr, **kwargs):
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
-                self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+                self.n_itr_cycle = int(self.n_ep_cycle * n_ep_itr)
             else:
                 # default to 1 ep
                 self.n_itr_cycle = n_ep_itr

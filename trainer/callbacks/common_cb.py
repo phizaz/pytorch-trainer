@@ -22,8 +22,8 @@ class LRSchedulerCb(Callback):
     """
     def __init__(self,
                  lr_fn,
-                 n_cycle_itr=1,
-                 n_cycle_ep=None,
+                 n_cycle_itr: int = 1,
+                 n_cycle_ep: float = None,
                  loss_key='loss',
                  **kwargs):
         super().__init__(**kwargs)
@@ -36,7 +36,7 @@ class LRSchedulerCb(Callback):
     def on_train_begin(self, n_ep_itr, **kwargs):
         super().on_train_begin(n_ep_itr=n_ep_itr, **kwargs)
         if self.n_cycle_itr is None:
-            self.n_cycle_itr = self.n_cycle_ep * n_ep_itr
+            self.n_cycle_itr = int(self.n_cycle_ep * n_ep_itr)
 
     def on_step_begin(self, trainer, n_max_itr, i_itr, n_ep_itr, callbacks,
                       **kwargs):
@@ -69,15 +69,17 @@ class LRReducePlateauCb(Callback):
     """
     Args:
         key: the key to watch
+        mode: 'max' or 'min'
         n_cycle: how frequent to check (need to match the validator), default: n_ep_itr
+        patience: how many cycles to wait for an improvement
         **kwargs: see ReduceLROnPlateau on Pytorch
     """
     def __init__(self,
                  key,
                  mode,
                  n_itr_cycle: int = None,
-                 n_ep_cycle: int = None,
-                 patience=10,
+                 n_ep_cycle: float = None,
+                 patience: int = 10,
                  factor=0.2,
                  **kwargs):
         super().__init__()
@@ -107,7 +109,7 @@ class LRReducePlateauCb(Callback):
     def on_train_begin(self, trainer, n_ep_itr, **kwargs):
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
-                self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+                self.n_itr_cycle = int(self.n_ep_cycle * n_ep_itr)
             else:
                 # default to 1 ep
                 self.n_itr_cycle = n_ep_itr
@@ -148,21 +150,28 @@ class WeightPolyakCb(Callback):
         nn.utils.vector_to_parameters(new_w, trainer.net.parameters())
         self.w = None
 
+
 class GracefulException(Exception):
     pass
+
 
 class TerminateLRException(GracefulException):
     pass
 
 
 class TerminateLRCb(Callback):
-    def __init__(self, lr_thresh, begin=0):
+    """
+    Args:
+        lr_thresh: <= which will terminate
+        begin_itr: not terminate until the specified itr
+    """
+    def __init__(self, lr_thresh: float, begin_itr: int = 0):
         super().__init__()
         self.lr_thresh = lr_thresh
-        self.begin = begin
+        self.begin_itr = begin_itr
 
     def on_batch_end(self, trainer, i_itr, **kwargs):
-        if i_itr >= self.begin:
+        if i_itr >= self.begin_itr:
             lr = trainer.opt.param_groups[0]['lr']
             if lr <= self.lr_thresh:
                 raise TerminateLRException(
@@ -236,8 +245,10 @@ class StopAnyTimeCb(Callback):
             # cannot suppress errors
             return False
 
+
 class AutoInterruptException(GracefulException):
     pass
+
 
 class AutoInterrupt(Callback):
     """raises a KeyboardInterrupt at n_itr, useful for playing around."""
@@ -248,4 +259,5 @@ class AutoInterrupt(Callback):
     def on_batch_begin(self, i_itr, **kwargs):
         # this will allow for the validate to end from the last itr
         if i_itr >= self.n_itr:
-            raise AutoInterruptException(f'auto interrupt at i_itr = {self.n_itr}')
+            raise AutoInterruptException(
+                f'auto interrupt at i_itr = {self.n_itr}')
