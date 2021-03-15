@@ -83,14 +83,18 @@ class BaseTrainer(LooperInterface):
         }
 
     def backward_pass(self, forward, **kwargs):
-        assert forward['loss'].dim() == 0, "loss must be reduced"
-        with time_elapsed_to_profiler('backward'):
-            self.opt.zero_grad()
-            forward['loss'].backward()
+        loss = forward['loss']
+        if loss is not None:
+            assert forward['loss'].dim() == 0, "loss must be reduced"
+            with time_elapsed_to_profiler('backward'):
+                self.opt.zero_grad()
+                forward['loss'].backward()
 
-    def optimize(self, **kwargs):
-        with time_elapsed_to_profiler('optimize'):
-            self.opt.step()
+    def optimize(self, forward, **kwargs):
+        loss = forward['loss']
+        if loss is not None:
+            with time_elapsed_to_profiler('optimize'):
+                self.opt.step()
 
     def on_abrupt_end(self, **kwargs):
         # this rolls back the i_itr on the failed iteration

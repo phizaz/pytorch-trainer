@@ -10,6 +10,7 @@ from .callbacks.profiler_cb import *
 
 __all__ = ['amp_trainer_mask']
 
+
 def amp_trainer_mask(cls):
     class AMPTrainer(cls):
         """Pytorch's automatic mixed precision
@@ -27,17 +28,20 @@ def amp_trainer_mask(cls):
 
         def backward_pass(self, forward, **kwargs):
             loss = forward['loss']
-            assert loss.dim() == 0, "loss must be reduced"
-            with time_elapsed_to_profiler('backward'):
-                self.opt.zero_grad()
-                self.scaler.scale(loss).backward()
-                # allow modifying the gradient directly
-                self.scaler.unscale_(self.opt)
+            if loss is not None:
+                assert loss.dim() == 0, "loss must be reduced"
+                with time_elapsed_to_profiler('backward'):
+                    self.opt.zero_grad()
+                    self.scaler.scale(loss).backward()
+                    # allow modifying the gradient directly
+                    self.scaler.unscale_(self.opt)
 
-        def optimize(self, **kwargs):
-            with time_elapsed_to_profiler('optimize'):
-                self.scaler.step(self.opt)
-                self.scaler.update()
+        def optimize(self, forward, **kwargs):
+            loss = forward['loss']
+            if loss is not None:
+                with time_elapsed_to_profiler('optimize'):
+                    self.scaler.step(self.opt)
+                    self.scaler.update()
 
         def get_state(self):
             # including the amp state

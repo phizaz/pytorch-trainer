@@ -95,11 +95,11 @@ class Looper:
         self('on_forward_end', data=data, forward=forward)
         # backward pass
         self('on_backward_begin', data=data, forward=forward)
-        self.base.backward_pass(forward, **self._kwargs())
+        self.base.backward_pass(forward=forward, **self._kwargs())
         self('on_backward_end', data=data, forward=forward)
         # step the optimizer
         self('on_step_begin', data=data, forward=forward)
-        self.base.optimize(**self._kwargs())
+        self.base.optimize(forward=forward, **self._kwargs())
         self('on_step_end', data=data, forward=forward)
         self('on_batch_end', data=data, forward=forward)
 
