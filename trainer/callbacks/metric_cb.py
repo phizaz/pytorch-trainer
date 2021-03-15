@@ -90,7 +90,9 @@ class AvgCb(StatsCallback):
 
     def on_backward_begin(self, i_itr, forward, **kwargs):
         for k in self.keys:
-            val = item(forward[k])
+            val = item(forward.get(k, None))
+            if val is None:
+                continue
             n = forward['n']
             self.avg[k].update(val, w=n)
         info = {k: self.avg[k].val() for k in self.keys}
