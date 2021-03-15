@@ -81,12 +81,14 @@ class LRReducePlateauCb(Callback):
                  n_ep_cycle: float = None,
                  patience: int = 10,
                  factor=0.2,
+                 n_start_ep: int = 0,
                  **kwargs):
         super().__init__()
         self.scheduler = None
         self.key = key
         self.n_itr_cycle = n_itr_cycle
         self.n_ep_cycle = n_ep_cycle
+        self.n_start_ep = n_start_ep
         self.mode = mode
         self.patience = patience
         self.factor = factor
@@ -122,8 +124,8 @@ class LRReducePlateauCb(Callback):
             **self.kwargs,
         )
 
-    def on_batch_end(self, callbacks, i_itr, **kwargs):
-        if i_itr % self.n_itr_cycle == 0:
+    def on_batch_end(self, callbacks, i_itr, i_ep, **kwargs):
+        if i_itr % self.n_itr_cycle == 0 and i_ep >= self.n_start_ep:
             # getting the key value from the stats
             v = get_val_from_statcbs(self.key, callbacks)
             self.scheduler.step(v)
