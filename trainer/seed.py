@@ -22,4 +22,7 @@ def set_random_state(state):
     random.setstate(state['python'])
     np.random.set_state(state['numpy'])
     torch.set_rng_state(state['pytorch'])
-    torch.cuda.set_rng_state_all(state['pytorch_cuda'])
+    try: 
+        torch.cuda.set_rng_state_all(state['pytorch_cuda'])
+    except IndexError:
+        print('cannot load the cuda random state') 
