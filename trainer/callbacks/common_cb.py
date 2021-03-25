@@ -65,6 +65,44 @@ class LRSchedulerCb(Callback):
                     g['lr'] = g['base_lr'] * scale
 
 
+class CosineAnnealingWarmRestartsLRCb(Callback):
+    def __init__(self, T_0, T_mul=1, eta_min=0, last_epoch=-1, verbose=False):
+        super().__init__()
+        self.scheduler = None
+        self.T_0 = T_0
+        self.T_mul = T_mul
+        self.eta_min = eta_min
+        self.last_epoch = last_epoch
+        self.verbose = verbose
+
+    def get_state(self):
+        assert self.scheduler is not None
+        return {
+            'self': super().get_state(),
+            'scheduler': self.scheduler.state_dict(),
+        }
+
+    def load_state(self, state):
+        assert self.scheduler is not None
+        super().load_state(state['self'])
+        self.scheduler.load_state_dict(state['scheduler'])
+
+    # should load before resume
+    @set_order(0)
+    def on_train_begin(self, trainer, **kwargs):
+        self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            trainer.opt,
+            T_0=self.T_0,
+            T_mult=self.T_mul,
+            eta_min=self.eta_min,
+            last_epoch=self.last_epoch,
+            verbose=self.verbose,
+        )
+
+    def on_batch_end(self, f_ep, **kwargs):
+        self.scheduler.step(f_ep)
+
+
 class LRReducePlateauCb(Callback):
     """
     Args:
