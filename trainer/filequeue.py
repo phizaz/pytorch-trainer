@@ -108,7 +108,7 @@ class FileQueue(ContextDecorator):
         if self.lockfile is not None:
             try:
                 os.unlink(self.lockfile)
-                if self.verbose: print(f'Lockfile {self.lockfile} released')
+                if self.verbose: print(f'Queue file {self.lockfile} released')
             except Exception as e:  # ignore errors
                 print(f'error releasing lock file {self.lockfile}:', e)
             self.is_locked = False
