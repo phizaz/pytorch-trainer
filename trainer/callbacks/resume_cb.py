@@ -421,8 +421,11 @@ def load_all(dirname,
 
         # load random state
         if load_rng:
-            path = os.path.join(dirname, 'rng.pkl')
-            load_random_state(path)
+            try:
+                path = os.path.join(dirname, 'rng.pkl')
+                load_random_state(path)
+            except FileNotFoundError:
+                print('random state file not found ... skipping')
         # load trainer
         if os.path.exists(os.path.join(dirname, 'model.pkl')):
             # new version
