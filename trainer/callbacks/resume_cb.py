@@ -61,54 +61,46 @@ class AutoResumeCb(Callback):
 
     # should resume before normal loop
     @set_order(90)
-    def on_train_begin(self, trainer, callbacks, n_ep_itr, **kwargs):
+    def on_train_begin(self, vars: StageVars):
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
-                self.n_itr_cycle = int(self.n_ep_cycle * n_ep_itr)
+                self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
             else:
                 # default to 1 ep
-                self.n_itr_cycle = n_ep_itr
+                self.n_itr_cycle = vars.n_ep_itr
         if self.resume:
-            self._load(trainer, callbacks)
-            self._start_itr = trainer.i_itr
+            self._load(vars.trainer, vars.callbacks)
+            self._start_itr = vars.trainer.i_itr
 
-    def on_batch_end(self, i_itr, trainer, callbacks, **kwargs):
-        if self.n_itr_cycle > 0 and i_itr % self.n_itr_cycle == 0:
-            self._save(i_itr, trainer, callbacks, **kwargs)
+    def on_batch_end(self, vars: StageVars):
+        if self.n_itr_cycle > 0 and vars.i_itr % self.n_itr_cycle == 0:
+            self._save(vars)
 
-    def on_train_end(self, i_itr, trainer, callbacks, **kwargs):
-        if i_itr > 1:
+    def on_train_end(self, vars: StageVars):
+        if vars.i_itr > 1:
             # it must have something to save
-            if i_itr == self._get_latest_itr():
+            if vars.i_itr == self._get_latest_itr():
                 # do nothing, no need to save
                 return
-            self._save(i_itr,
-                       trainer,
-                       callbacks,
-                       ignore_history=True,
-                       **kwargs)
+            self._save(vars, ignore_history=True)
 
         if self.return_best_model:
             # load the best model at the end
-            self._load_best(trainer)
+            self._load_best(vars.trainer)
 
-    def on_abrupt_end(self, i_itr, trainer, callbacks, **kwargs):
+    def on_abrupt_end(self, vars: StageVars):
         if self.save_abrupt_end:
-            if i_itr > 1:
+            if vars.i_itr > 1:
                 # it must have something to save
                 last_itr = self._get_latest_itr()
-                if last_itr is not None and i_itr <= last_itr:
+                if last_itr is not None and vars.i_itr <= last_itr:
                     # abrupt end will not destroy the latest dir
                     return
-                self._save(i_itr,
-                           trainer,
-                           callbacks,
-                           ignore_history=True,
-                           **kwargs)
+                self._save(vars, ignore_history=True)
 
         if self.return_best_model:
             # load the best model at the end
-            self._load_best(trainer)
+            self._load_best(vars.trainer)
 
     def _load_best(self, trainer):
         """load best iteration to the trainer"""
@@ -153,18 +145,13 @@ class AutoResumeCb(Callback):
         assert v is not None, f"metric {self.metric} must be present for the save, you must need to set the cycles correctly, there are {all_keys}"
         return v
 
-    def _save(self,
-              i_itr,
-              trainer,
-              callbacks,
-              ignore_history: bool = False,
-              **kwargs):
+    def _save(self, vars: StageVars, ignore_history: bool = False):
         """save a checkpoint, decides where to save"""
         try:
             if self.keep_best:
-                metric = self._get_metric(callbacks)
+                metric = self._get_metric(vars.callbacks)
                 # jot the metrics (must be before)
-                self._state['history']['i_itr'].append(i_itr)
+                self._state['history']['i_itr'].append(vars.i_itr)
                 self._state['history']['metric'].append(metric)
         except Exception:
             # ignore history when it is ended by train_end
@@ -175,12 +162,12 @@ class AutoResumeCb(Callback):
                 raise
 
         # save a checkpoint in a direction with the iteration name
-        last_dir = str(i_itr)
+        last_dir = str(vars.i_itr)
         dirname = os.path.join(self.dirname, last_dir)
         if self.verbose: print(f'saving {last_dir} ...')
         save_all(dirname,
-                 trainer,
-                 callbacks,
+                 vars.trainer,
+                 vars.callbacks,
                  verbose=self.verbose,
                  extras=self.extras)
 
@@ -190,9 +177,9 @@ class AutoResumeCb(Callback):
 
         # exclude from a keep function
         if self.keep_fn is not None:
-            if self.keep_fn(i_itr=i_itr, trainer=trainer, **kwargs):
+            if self.keep_fn(vars=vars):
                 # exclude this i_itr
-                self._state['excludes'].append(str(i_itr))
+                self._state['excludes'].append(str(vars.i_itr))
 
         exclude = [last_dir] + self._state['excludes']
         # if keep best, point the best directory to this
@@ -201,7 +188,7 @@ class AutoResumeCb(Callback):
             exclude += [best_dir]
 
         # keep only n last (also the best if available)
-        self._prune(i_itr, exclude)
+        self._prune(vars.i_itr, exclude)
 
         # make symlink to the last dir
         self._symlink_latest()
@@ -232,10 +219,6 @@ class AutoResumeCb(Callback):
 
     def _symlink_latest(self):
         return symlink(self.dirname, self._get_latest_itr(), 'latest')
-
-
-# alias
-AutoResume2Cb = AutoResumeCb
 
 
 def combine_keep_fn(fns):
@@ -370,8 +353,8 @@ def symlink(dirname, tgt_itr, name):
         str(tgt_itr),
         name,
         target_is_directory=True,
-        dir_fd=os.open(dirname,
-                       os.O_RDONLY),  # important to make the link visible
+        # dir_fd=os.open(dirname,
+        #                os.O_RDONLY),  # important to make the link visible
     )
     return str(tgt_itr)
 

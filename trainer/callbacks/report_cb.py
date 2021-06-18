@@ -17,7 +17,7 @@ class ReportItrCb(BoardCallback):
     def on_batch_begin(self, vars: StageVars):
         super().on_batch_begin(vars)
         self.add_to_bar_and_hist({
-            'i_itr': vars.si_itr,
+            'i_itr': vars.i_itr,
             'f_ep': vars.f_ep,
         })
         self.add_to_hist({

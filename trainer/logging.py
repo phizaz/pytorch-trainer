@@ -1,8 +1,10 @@
-from contextlib import contextmanager, nullcontext
 import os
-from datetime import datetime
-import uuid
 import sys
+import uuid
+from contextlib import contextmanager
+from datetime import datetime
+
+from .filelock import nullcontext
 
 
 @contextmanager

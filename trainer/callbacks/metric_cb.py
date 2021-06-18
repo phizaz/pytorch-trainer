@@ -13,12 +13,12 @@ class CollectCb(StatsCallback):
         # should this callback be the one to collect?
         self.has_authority = {k: False for k in self.collect_keys}
 
-    def on_ep_begin(self, buffer, **kwargs):
+    def on_ep_begin(self, vars: StageVars):
         for k in self.collect_keys:
-            if k not in buffer:
+            if k not in vars.buffer:
                 self.has_authority[k] = True
             if self.has_authority[k]:
-                buffer[k] = []
+                vars.buffer[k] = []
 
     def _combine(self, v):
         try:
@@ -32,13 +32,13 @@ class CollectCb(StatsCallback):
                     out.append(y)
             return out
 
-    def on_forward_end(self, forward, buffer, i_itr, n_ep_itr, **kwargs):
+    def on_forward_end(self, vars: StageVars):
         for k in self.collect_keys:
             if self.has_authority[k]:
-                buffer[k].append(cpu(detach(forward[k])))
+                vars.buffer[k].append(cpu(detach(vars.forward[k])))
                 # flattens on the end of epoch
-                if i_itr % n_ep_itr == 0:
-                    buffer[k] = self._combine(buffer[k])
+                if vars.i_itr % vars.n_ep_itr == 0:
+                    vars.buffer[k] = self._combine(vars.buffer[k])
 
 
 class MovingAvgCb(BoardCallback):
@@ -55,17 +55,17 @@ class MovingAvgCb(BoardCallback):
         # average is the state
         self._state['avg'] = defaultdict(partial(SMA, size=n))
 
-    def on_backward_begin(self, forward, i_itr, **kwargs):
+    def on_backward_begin(self, vars: StageVars):
         # update the stats
         for k in self.keys:
-            val = forward.get(k, None)
+            val = vars.forward.get(k, None)
             if val is None: continue
             if isinstance(val, Tensor) and len(val.shape) == 1:
                 val = val.mean()
-            self.avg[k].update(val, w=forward['n'])
+            self.avg[k].update(val, w=vars.forward['n'])
 
         info = {f'{self.prefix}{k}': self.avg[k].val() for k in self.keys}
-        info['i_itr'] = i_itr
+        info['i_itr'] = vars.i_itr
         if self.mode == 'bar':
             self.add_to_bar_and_hist(info)
         elif self.mode == 'buffer':
@@ -85,18 +85,18 @@ class AvgCb(StatsCallback):
         self.keys = keys
         self.avg = None
 
-    def on_ep_begin(self, **kwargs):
+    def on_ep_begin(self, vars: StageVars):
         self.avg = defaultdict(Average)
 
-    def on_backward_begin(self, i_itr, forward, **kwargs):
+    def on_backward_begin(self, vars: StageVars):
         for k in self.keys:
-            val = item(forward.get(k, None))
+            val = item(vars.forward.get(k, None))
             if val is None:
                 continue
-            n = forward['n']
+            n = vars.forward['n']
             self.avg[k].update(val, w=n)
         info = {k: self.avg[k].val() for k in self.keys}
-        info['i_itr'] = i_itr
+        info['i_itr'] = vars.i_itr
         self.add_to_bar_and_hist(info)
 
 
@@ -109,13 +109,13 @@ class AUROCCb(CollectCb):
         cls_names: a mapping i => string
     """
     def __init__(
-            self,
-            keys,
-            cls_ids=None,
-            apply_sigmoid=True,
-            cls_id_to_name=None,
-            pos_label=1,
-            neg_label=0,
+        self,
+        keys,
+        cls_ids=None,
+        apply_sigmoid=True,
+        cls_id_to_name=None,
+        pos_label=1,
+        neg_label=0,
     ):
         # collect 'pred' and 'y'
         super().__init__(keys=keys)
@@ -126,9 +126,9 @@ class AUROCCb(CollectCb):
         self.pos_label = pos_label
         self.neg_label = neg_label
 
-    def on_ep_end(self, buffer, i_itr, **kwargs):
-        pred = buffer[self.keys[0]]
-        y = buffer[self.keys[1]].long()
+    def on_ep_end(self, vars: StageVars):
+        pred = vars.buffer[self.keys[0]]
+        y = vars.buffer[self.keys[1]].long()
         assert isinstance(pred, Tensor), 'you forgot to tensorify pred'
         assert isinstance(y, Tensor), 'you forgot to tensorify y'
 
@@ -172,7 +172,7 @@ class AUROCCb(CollectCb):
         macro = np.array([aurocs[i] for i in idx if i not in ignored]).mean()
 
         bar = {
-            'i_itr': i_itr,
+            'i_itr': vars.i_itr,
             'auroc_weighted': weighted,
             'auroc_macro': macro,
         }
@@ -182,7 +182,7 @@ class AUROCCb(CollectCb):
             info = {f'auroc_{i}': aurocs[i] for i in idx}
         else:
             info = {f'auroc_{self.cls_id_to_name[i]}': aurocs[i] for i in idx}
-        info['i_itr'] = i_itr
+        info['i_itr'] = vars.i_itr
         self.add_to_hist(info)
         self._flush()
 

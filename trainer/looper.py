@@ -94,7 +94,7 @@ class Looper:
         """these will be supplied to callbacks and method calls,
         these are variables that are expected to be used by any callback"""
         n_ep_itr = len(self.loader)
-        StageVars(
+        vars = StageVars(
             trainer=self.base,
             looper=self,
             loader=self.loader,
@@ -110,7 +110,7 @@ class Looper:
             forward=forward,
             e=e,
         )
-        return StageVars
+        return vars
 
     def one_batch(self, data: Dict):
         """runs for one batch"""
@@ -119,7 +119,7 @@ class Looper:
         self('on_batch_begin', data=data)
         # forward pass
         self('on_forward_begin', data=data)
-        forward = self.base.forward_pass(vars=self.stage_vars(data=data))
+        forward = self.base.forward_pass(data=data, vars=self.stage_vars(data=data))
         self('on_forward_end', data=data, forward=forward)
         # backward pass
         self('on_backward_begin', data=data, forward=forward)
@@ -187,5 +187,5 @@ class Looper:
         """call event callbacks"""
         return callback_call(callbacks=self.callbacks,
                              method=event,
-                             vars=self.stage_vars(kwargs))
+                             vars=self.stage_vars(**kwargs))
 

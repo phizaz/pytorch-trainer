@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from functools import partial
+from shutil import rmtree
 
 import pandas as pd
 import torch
@@ -223,9 +224,9 @@ class BoardCallback(StatsCallback):
         else:
             self.n_log_hist_cycle = n_log_hist_cycle
 
-    def on_train_begin(self, callbacks, vars: 'StageVars'):
+    def on_train_begin(self, vars: 'StageVars'):
         """automatically discovers the tensorboard cb"""
-        for cb in callbacks:
+        for cb in vars.callbacks:
             if isinstance(cb, TensorboardCb):
                 self.writer = cb.writer
 
@@ -334,15 +335,9 @@ class TensorboardCb(Callback):
     """
     def __init__(self, path, resume=True):
         super().__init__()
-        self._state['start_time'] = self.start_time_string()
         self.path = path
         self.resume = resume
         self.writer = None
-
-    def start_time_string(self):
-        """this string will be extended to the path to create a unique path"""
-        from datetime import datetime
-        return datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
     # make sure it initializes before others (normal) use it
     # but it should be "after" the autoresume
@@ -350,11 +345,11 @@ class TensorboardCb(Callback):
     def on_train_begin(self, vars: 'StageVars'):
         from torch.utils.tensorboard import SummaryWriter
         if not self.resume:
-            # if not resume re-generate the string
-            self._state['start_time'] = self.start_time_string()
-        self.writer = SummaryWriter(self.path + '/' +
-                                    self._state['start_time'],
-                                    flush_secs=10)
+            if os.path.exists(self.path):
+                rmtree(self.path)
+            else:
+                os.makedirs(self.path)
+        self.writer = SummaryWriter(self.path, flush_secs=10)
 
     def on_train_end(self, vars: 'StageVars'):
         if self.writer is not None:

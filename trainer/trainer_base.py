@@ -82,16 +82,16 @@ class BaseTrainer(LooperInterface):
             'n': len(y),
         }
 
-    def backward_pass(self, forward, vars: StageVars):
-        loss = forward['loss']
+    def backward_pass(self, vars: StageVars):
+        loss = vars.forward['loss']
         if loss is not None:
-            assert forward['loss'].dim() == 0, "loss must be reduced"
+            assert vars.forward['loss'].dim() == 0, "loss must be reduced"
             with time_elapsed_to_profiler('backward'):
                 self.opt.zero_grad()
-                forward['loss'].backward()
+                vars.forward['loss'].backward()
 
-    def optimize(self, forward, vars: StageVars):
-        loss = forward['loss']
+    def optimize(self, vars: StageVars):
+        loss = vars.forward['loss']
         if loss is not None:
             with time_elapsed_to_profiler('optimize'):
                 self.opt.step()

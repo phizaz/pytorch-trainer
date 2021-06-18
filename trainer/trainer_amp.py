@@ -26,8 +26,8 @@ def amp_trainer_mask(cls):
             with autocast():
                 return super().forward_pass(data=data, vars=vars)
 
-        def backward_pass(self, forward, vars: StageVars):
-            loss = forward['loss']
+        def backward_pass(self, vars: StageVars):
+            loss = vars.forward['loss']
             if loss is not None:
                 assert loss.dim() == 0, "loss must be reduced"
                 with time_elapsed_to_profiler('backward'):
@@ -36,8 +36,8 @@ def amp_trainer_mask(cls):
                     # allow modifying the gradient directly
                     self.scaler.unscale_(self.opt)
 
-        def optimize(self, forward, vars: StageVars):
-            loss = forward['loss']
+        def optimize(self, vars: StageVars):
+            loss = vars.forward['loss']
             if loss is not None:
                 with time_elapsed_to_profiler('optimize'):
                     self.scaler.step(self.opt)
