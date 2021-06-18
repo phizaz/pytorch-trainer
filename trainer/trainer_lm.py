@@ -6,10 +6,10 @@ from .callbacks.start import *
 class LMTrainer(BaseTrainer):
     """language modeling trainer
     """
-    def on_ep_begin(self, **kwargs):
+    def on_ep_begin(self, vars: StageVars):
         self.hidden = None
 
-    def forward_pass(self, data):
+    def forward_pass(self, data, vars: StageVars):
         x, y = data
         pred, hidden = self.net(x, self.hidden)
         self.hidden = detach(hidden)

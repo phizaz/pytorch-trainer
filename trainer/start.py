@@ -13,7 +13,6 @@ from .predictor_base import *
 from .predictor_validate import *
 from .stateful import *
 from .trainer_amp import *
-from .trainer_apex import *
 from .trainer_base import *
 from .trainer_lm import *
 from .trainer_multiclass import *

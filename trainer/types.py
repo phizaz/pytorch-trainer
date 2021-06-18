@@ -102,3 +102,4 @@ def apply_structure(structure, fn, max_depth=2, current_depth=0):
     else:
         # NOTE: single object
         return fn(structure)
+

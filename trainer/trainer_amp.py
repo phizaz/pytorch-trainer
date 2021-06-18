@@ -22,11 +22,11 @@ def amp_trainer_mask(cls):
             print('init pytorch\'s amp')
             self.scaler = GradScaler()
 
-        def forward_pass(self, data, **kwargs):
+        def forward_pass(self, data, vars: StageVars):
             with autocast():
-                return super().forward_pass(data=data, **kwargs)
+                return super().forward_pass(data=data, vars=vars)
 
-        def backward_pass(self, forward, **kwargs):
+        def backward_pass(self, forward, vars: StageVars):
             loss = forward['loss']
             if loss is not None:
                 assert loss.dim() == 0, "loss must be reduced"
@@ -36,7 +36,7 @@ def amp_trainer_mask(cls):
                     # allow modifying the gradient directly
                     self.scaler.unscale_(self.opt)
 
-        def optimize(self, forward, **kwargs):
+        def optimize(self, forward, vars: StageVars):
             loss = forward['loss']
             if loss is not None:
                 with time_elapsed_to_profiler('optimize'):

@@ -3,7 +3,7 @@ from .trainer_base import *
 from .callbacks.metric_cb import *
 
 class MultiClassTrainer(BaseTrainer):
-    def forward_pass(self, data, **kwargs):
+    def forward_pass(self, data, vars: StageVars):
         x, y = data
         pred = self.net(x)
         loss = F.cross_entropy(pred, y)

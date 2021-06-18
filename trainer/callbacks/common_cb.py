@@ -1,7 +1,8 @@
 from torch import optim
 
 from ..params_grads import *
-from .base_cb import *
+from .base_cb import Callback, StageVars, get_val_from_statcbs, set_order
+from .exceptions import *
 
 
 class GradientClipCb(Callback):
@@ -10,8 +11,8 @@ class GradientClipCb(Callback):
         super().__init__(**kwargs)
         self.clip_norm = clip_norm
 
-    def on_backward_end(self, trainer, **kwargs):
-        nn.utils.clip_grad_norm_(iter_opt_params(trainer.opt),
+    def on_backward_end(self, vars: StageVars):
+        nn.utils.clip_grad_norm_(iter_opt_params(vars.trainer.opt),
                                  max_norm=self.clip_norm)
 
 
@@ -33,32 +34,31 @@ class LRSchedulerCb(Callback):
         self.n_cycle_ep = n_cycle_ep
         self.loss_key = loss_key
 
-    def on_train_begin(self, n_ep_itr, **kwargs):
-        super().on_train_begin(n_ep_itr=n_ep_itr, **kwargs)
+    def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         if self.n_cycle_itr is None:
-            self.n_cycle_itr = int(self.n_cycle_ep * n_ep_itr)
+            self.n_cycle_itr = int(self.n_cycle_ep * vars.n_ep_itr)
 
-    def on_step_begin(self, trainer, n_max_itr, i_itr, n_ep_itr, callbacks,
-                      **kwargs):
-        if i_itr % self.n_cycle_itr == 0:
+    def on_step_begin(self, vars: StageVars):
+        if vars.i_itr % self.n_cycle_itr == 0:
             try:
-                loss = get_val_from_statcbs(self.loss_key, callbacks)
+                loss = get_val_from_statcbs(self.loss_key, vars.callbacks)
             except ValueError:
                 loss = None
             # f_ep should start from 0.00 and is float
-            f_ep = i_itr / n_ep_itr
-            n_max_ep = n_max_itr / n_ep_itr
+            f_ep = vars.i_itr / vars.n_ep_itr
+            n_max_ep = vars.n_max_itr / vars.n_ep_itr
             scale = self.lr_fn(
-                p=i_itr / n_max_itr,
-                i=i_itr,
-                n_max_itr=n_max_itr,
+                p=vars.i_itr / vars.n_max_itr,
+                i=vars.i_itr,
+                n_max_itr=vars.n_max_itr,
                 f_ep=f_ep,
                 n_max_ep=n_max_ep,
                 loss=loss,
             )
             # only care the float scales
             if isinstance(scale, (int, float)):
-                for g in trainer.opt.param_groups:
+                for g in vars.trainer.opt.param_groups:
                     assert 'lr' in g, "the optimizer doesn't seed to have the lr option"
                     if 'base_lr' not in g:
                         g['base_lr'] = g['lr']
@@ -89,9 +89,9 @@ class CosineAnnealingWarmRestartsLRCb(Callback):
 
     # should load before resume
     @set_order(0)
-    def on_train_begin(self, trainer, **kwargs):
+    def on_train_begin(self, vars: StageVars):
         self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            trainer.opt,
+            vars.trainer.opt,
             T_0=self.T_0,
             T_mult=self.T_mul,
             eta_min=self.eta_min,
@@ -99,8 +99,8 @@ class CosineAnnealingWarmRestartsLRCb(Callback):
             verbose=self.verbose,
         )
 
-    def on_batch_end(self, f_ep, **kwargs):
-        self.scheduler.step(f_ep)
+    def on_batch_end(self, vars: StageVars):
+        self.scheduler.step(vars.f_ep)
 
 
 class LRReducePlateauCb(Callback):
@@ -146,26 +146,26 @@ class LRReducePlateauCb(Callback):
 
     # should load before resume
     @set_order(0)
-    def on_train_begin(self, trainer, n_ep_itr, **kwargs):
+    def on_train_begin(self, vars: StageVars):
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
-                self.n_itr_cycle = int(self.n_ep_cycle * n_ep_itr)
+                self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
             else:
                 # default to 1 ep
-                self.n_itr_cycle = n_ep_itr
+                self.n_itr_cycle = vars.n_ep_itr
 
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            trainer.opt,
+            vars.trainer.opt,
             mode=self.mode,
             patience=self.patience,
             factor=self.factor,
             **self.kwargs,
         )
 
-    def on_batch_end(self, callbacks, i_itr, i_ep, **kwargs):
-        if i_itr % self.n_itr_cycle == 0 and i_ep >= self.n_start_ep:
+    def on_batch_end(self, vars: StageVars):
+        if vars.i_itr % self.n_itr_cycle == 0 and vars.i_ep >= self.n_start_ep:
             # getting the key value from the stats
-            v = get_val_from_statcbs(self.key, callbacks)
+            v = get_val_from_statcbs(self.key, vars.callbacks)
             self.scheduler.step(v)
 
 
@@ -178,25 +178,17 @@ class WeightPolyakCb(Callback):
     def get_params(self, net):
         return nn.utils.parameters_to_vector(net.parameters())
 
-    def on_step_begin(self, trainer, **kwargs):
+    def on_step_begin(self, vars: StageVars):
         # get params
-        self.w = self.get_params(trainer.net)
+        self.w = self.get_params(vars.trainer.net)
 
     @torch.no_grad()
-    def on_step_end(self, trainer, **kwargs):
+    def on_step_end(self, vars: StageVars):
         # update w
-        new_w = self.get_params(trainer.net)
+        new_w = self.get_params(vars.trainer.net)
         new_w = self.rate * self.w + (1 - self.rate) * new_w
-        nn.utils.vector_to_parameters(new_w, trainer.net.parameters())
+        nn.utils.vector_to_parameters(new_w, vars.trainer.net.parameters())
         self.w = None
-
-
-class GracefulException(Exception):
-    pass
-
-
-class TerminateLRException(GracefulException):
-    pass
 
 
 class TerminateLRCb(Callback):
@@ -210,8 +202,8 @@ class TerminateLRCb(Callback):
         self.lr_thresh = lr_thresh
         self.begin_itr = begin_itr
 
-    def on_batch_end(self, trainer, i_itr, **kwargs):
-        if i_itr >= self.begin_itr:
+    def on_batch_end(self, trainer, vars: StageVars):
+        if vars.i_itr >= self.begin_itr:
             lr = trainer.opt.param_groups[0]['lr']
             if lr <= self.lr_thresh:
                 raise TerminateLRException(
@@ -241,15 +233,15 @@ class EarlyStopCb(Callback):
         self._state['best_i'] = None
         self._state['i'] = 0
 
-    def on_train_begin(self, n_ep_itr, **kwargs):
-        self.n_itr_cycle = self.n_ep_cycle * n_ep_itr
+    def on_train_begin(self, vars: StageVars):
+        self.n_itr_cycle = self.n_ep_cycle * vars.n_ep_itr
 
-    def on_batch_end(self, trainer, i_itr, n_ep_itr, callbacks, **kwargs):
-        if i_itr % self.n_itr_cycle == 0:
+    def on_batch_end(self, vars: StageVars):
+        if vars.i_itr % self.n_itr_cycle == 0:
             self.i += 1
             if self.verbose:
                 print(f'early stop: round {self.i}')
-            v = get_val_from_statcbs(self.metric, callbacks)
+            v = get_val_from_statcbs(self.metric, vars.callbacks)
             if self.best is None:
                 self.best = v
                 self.best_i = self.i
@@ -296,8 +288,8 @@ class AutoInterrupt(Callback):
         super().__init__(order=order)
         self.n_itr = n_itr
 
-    def on_batch_begin(self, i_itr, **kwargs):
+    def on_batch_begin(self, vars: StageVars):
         # this will allow for the validate to end from the last itr
-        if i_itr >= self.n_itr:
+        if vars.i_itr >= self.n_itr:
             raise AutoInterruptException(
                 f'auto interrupt at i_itr = {self.n_itr}')

@@ -60,15 +60,15 @@ class BaseTrainer(LooperInterface):
         """the default opt function"""
         return None
 
-    def on_train_begin(self, **kwargs):
+    def on_train_begin(self, vars: StageVars):
         """this is useful to implement automatic mixed-precision"""
         pass
 
-    def on_ep_begin(self, **kwargs):
+    def on_ep_begin(self, vars: StageVars):
         """if the forward_pass method alone is not enough, which is the case of language model"""
         pass
 
-    def forward_pass(self, data, **kwargs) -> Dict:
+    def forward_pass(self, data, vars: StageVars) -> Dict:
         """forward pass of the model, must return a dictionary."""
         x, y = data
         with time_elapsed_to_profiler('forward'):
@@ -82,7 +82,7 @@ class BaseTrainer(LooperInterface):
             'n': len(y),
         }
 
-    def backward_pass(self, forward, **kwargs):
+    def backward_pass(self, forward, vars: StageVars):
         loss = forward['loss']
         if loss is not None:
             assert forward['loss'].dim() == 0, "loss must be reduced"
@@ -90,13 +90,13 @@ class BaseTrainer(LooperInterface):
                 self.opt.zero_grad()
                 forward['loss'].backward()
 
-    def optimize(self, forward, **kwargs):
+    def optimize(self, forward, vars: StageVars):
         loss = forward['loss']
         if loss is not None:
             with time_elapsed_to_profiler('optimize'):
                 self.opt.step()
 
-    def on_abrupt_end(self, **kwargs):
+    def on_abrupt_end(self, vars: StageVars):
         # this rolls back the i_itr on the failed iteration
         self.state['i_itr'] = max(self.state['i_itr'] - 1, 0)
 

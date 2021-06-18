@@ -12,7 +12,7 @@ from ..stateful import *
 from ..types import *
 
 
-def set_order(order):
+def set_order(order: float):
     """decorator to set callback's method order
     usage: 
         @set_order(100)
@@ -56,43 +56,43 @@ class Callback(Stateful):
             return
         self.load_state(torch.load(path, map_location=map_location))
 
-    def on_train_begin(self, **kwargs):
+    def on_train_begin(self, vars: 'StageVars'):
         pass
 
-    def on_ep_begin(self, **kwargs):
+    def on_ep_begin(self, vars: 'StageVars'):
         pass
 
-    def on_batch_begin(self, **kwargs):
+    def on_batch_begin(self, vars: 'StageVars'):
         pass
 
-    def on_forward_begin(self, **kwargs):
+    def on_forward_begin(self, vars: 'StageVars'):
         pass
 
-    def on_forward_end(self, **kwargs):
+    def on_forward_end(self, vars: 'StageVars'):
         pass
 
-    def on_backward_begin(self, **kwargs):
+    def on_backward_begin(self, vars: 'StageVars'):
         pass
 
-    def on_backward_end(self, **kwargs):
+    def on_backward_end(self, vars: 'StageVars'):
         pass
 
-    def on_step_begin(self, **kwargs):
+    def on_step_begin(self, vars: 'StageVars'):
         pass
 
-    def on_step_end(self, **kwargs):
+    def on_step_end(self, vars: 'StageVars'):
         pass
 
-    def on_batch_end(self, **kwargs):
+    def on_batch_end(self, vars: 'StageVars'):
         pass
 
-    def on_ep_end(self, **kwargs):
+    def on_ep_end(self, vars: 'StageVars'):
         pass
 
-    def on_train_end(self, **kwargs):
+    def on_train_end(self, vars: 'StageVars'):
         pass
 
-    def on_abrupt_end(self, **kwargs):
+    def on_abrupt_end(self, vars: 'StageVars'):
         pass
 
     def __str__(self):
@@ -151,11 +151,11 @@ class StatsCallback(Callback):
     def df(self):
         return pd.DataFrame(self.hist)
 
-    def on_batch_begin(self, **kwargs):
+    def on_batch_begin(self, vars: 'StageVars'):
         # clear the buffer
         self.buffer = {}
 
-    def on_batch_end(self, **kwargs):
+    def on_batch_end(self, vars: 'StageVars'):
         """auto-flush after each iteration.
         don't forget to flush if you overload this method."""
         self._flush()
@@ -223,7 +223,7 @@ class BoardCallback(StatsCallback):
         else:
             self.n_log_hist_cycle = n_log_hist_cycle
 
-    def on_train_begin(self, callbacks, **kwargs):
+    def on_train_begin(self, callbacks, vars: 'StageVars'):
         """automatically discovers the tensorboard cb"""
         for cb in callbacks:
             if isinstance(cb, TensorboardCb):
@@ -283,10 +283,10 @@ class NumpyWriterCb(Callback):
         self.n_max_width = n_max_width
         self.np_writer = None
 
-    def on_train_begin(self, **kwargs):
+    def on_train_begin(self, vars: 'StageVars'):
         self.np_writer = NumpyWriter(self.path, n_max_width=self.n_max_width)
 
-    def on_train_end(self, **kwargs):
+    def on_train_end(self, vars: 'StageVars'):
         if self.np_writer is not None:
             self.np_writer.flush()
             self.np_writer.close()
@@ -298,7 +298,7 @@ class BaseNumpyWriterCb(Callback):
         self.np_writer = None
         self.n_log_hist_cycle = n_log_hist_cycle
 
-    def on_train_begin(self, callbacks, **kwargs):
+    def on_train_begin(self, callbacks, vars: 'StageVars'):
         """automatically discovers the tensorboard cb"""
         for cb in callbacks:
             if isinstance(cb, NumpyWriterCb):
@@ -309,7 +309,7 @@ class BaseNumpyWriterCb(Callback):
             if self.np_writer is not None:
                 self.np_writer.write_hist(name, _get_val(val), i_itr)
 
-    def on_batch_end(self, trainer, i_itr, **kwargs):
+    def on_batch_end(self, trainer, i_itr, vars: 'StageVars'):
         if self.np_writer is not None:
             self.np_writer.flush()
 
@@ -318,10 +318,11 @@ class NumpyWeightHistCb(BaseNumpyWriterCb):
     def __init__(self, n_log_hist_cycle: int):
         super().__init__(n_log_hist_cycle)
 
-    def on_batch_end(self, trainer, i_itr, **kwargs):
+    def on_batch_end(self, vars: 'StageVars'):
         self.write_hist('weight',
-                        lambda: params_to_vec(trainer.net.parameters()), i_itr)
-        super().on_batch_end(trainer=trainer, i_itr=i_itr, **kwargs)
+                        lambda: params_to_vec(vars.trainer.net.parameters()),
+                        vars.i_itr)
+        super().on_batch_end(vars)
 
 
 class TensorboardCb(Callback):
@@ -346,7 +347,7 @@ class TensorboardCb(Callback):
     # make sure it initializes before others (normal) use it
     # but it should be "after" the autoresume
     @set_order(91)
-    def on_train_begin(self, **kwargs):
+    def on_train_begin(self, vars: 'StageVars'):
         from torch.utils.tensorboard import SummaryWriter
         if not self.resume:
             # if not resume re-generate the string
@@ -355,7 +356,7 @@ class TensorboardCb(Callback):
                                     self._state['start_time'],
                                     flush_secs=10)
 
-    def on_train_end(self, **kwargs):
+    def on_train_end(self, vars: 'StageVars'):
         if self.writer is not None:
             self.writer.close()
 
@@ -400,7 +401,7 @@ def _append_dict(dict_of_list, dict):
     fill_na()
 
 
-def callback_call(callbacks: List[Callback], method: str, kwargs):
+def callback_call(callbacks: List[Callback], method: str, vars: 'StageVars'):
     """call a list of callbacks"""
     if callbacks is None:
         return
@@ -416,7 +417,7 @@ def callback_call(callbacks: List[Callback], method: str, kwargs):
         assert fn is not None, f'the callback {cb} does not have {method}'
         if fn is not None:
             try:
-                res = fn(**kwargs)
+                res = fn(vars=vars)
                 assert res is None or isinstance(
                     res, bool
                 ), f'returns from the callback {cb} must be either None or a boolean'
@@ -441,6 +442,8 @@ def _get_cb_order(cb, meth):
     order = getattr(fn, '_order', cb._order)
     return order
 
+
+from ..looper import StageVars
 
 if __name__ == "__main__":
     a = StatsCallback()
