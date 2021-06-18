@@ -349,13 +349,17 @@ def symlink(dirname, tgt_itr, name):
         return None
 
     # create a new symlink to the best
-    os.symlink(
-        str(tgt_itr),
-        name,
-        target_is_directory=True,
-        # dir_fd=os.open(dirname,
-        #                os.O_RDONLY),  # important to make the link visible
-    )
+    try:
+        os.symlink(
+            str(tgt_itr),
+            name,
+            target_is_directory=True,
+            # important to make the link visible
+            dir_fd=os.open(dirname, os.O_RDONLY),
+        )
+    except Exception as e:
+        # the system might not support symlink
+        print(f'cannot make a symlink at {name} ... err:', e)
     return str(tgt_itr)
 
 
