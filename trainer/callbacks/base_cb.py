@@ -104,9 +104,14 @@ class StatsCallback(Callback):
     """
     base class for callbacks that keep stats as "history" 
     """
-    def __init__(self, n_log_cycle=1):
+    def __init__(
+        self,
+        n_itr_cycle: int = None,
+        n_ep_cycle: float = None,
+    ):
         super().__init__()
-        self.n_log_cycle = n_log_cycle
+        self.n_itr_cycle = n_itr_cycle
+        self.n_ep_cycle = n_ep_cycle
         self._state['hist'] = defaultdict(list)
         # to be put to the progress bar (only)
         self.stats = {}
@@ -152,6 +157,15 @@ class StatsCallback(Callback):
     def df(self):
         return pd.DataFrame(self.hist)
 
+    def on_train_begin(self, vars: 'StageVars'):
+        """automatically gets the ep cycle if n_itr_cycle is not given"""
+        if self.n_itr_cycle is None:
+            if self.n_ep_cycle is not None:
+                self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
+            else:
+                # default to 1 itr
+                self.n_itr_cycle = 1
+
     def on_batch_begin(self, vars: 'StageVars'):
         # clear the buffer
         self.buffer = {}
@@ -196,7 +210,7 @@ class StatsCallback(Callback):
             # it might be used by others
 
     def is_log_cycle(self, i_itr):
-        return i_itr % self.n_log_cycle == 0
+        return i_itr % self.n_itr_cycle == 0
 
     def _eval(self, d):
         for k, v in d.items():
@@ -215,17 +229,19 @@ def _strip(x):
 
 class BoardCallback(StatsCallback):
     """writes into a tensorboard"""
-    def __init__(self, n_log_cycle: int = 1, n_log_hist_cycle=None):
-        super().__init__()
+    def __init__(
+        self,
+        n_itr_cycle: int = None,
+        n_ep_cycle: float = None,
+    ):
+        super().__init__(n_itr_cycle=n_itr_cycle, n_ep_cycle=n_ep_cycle)
         self.writer = None
-        self.n_log_cycle = n_log_cycle
-        if n_log_hist_cycle is None:
-            self.n_log_hist_cycle = n_log_cycle
-        else:
-            self.n_log_hist_cycle = n_log_hist_cycle
 
     def on_train_begin(self, vars: 'StageVars'):
         """automatically discovers the tensorboard cb"""
+        super().on_train_begin(vars)
+
+        # obtain the summary writer
         for cb in vars.callbacks:
             if isinstance(cb, TensorboardCb):
                 self.writer = cb.writer
@@ -249,28 +265,15 @@ class BoardCallback(StatsCallback):
         """write a dictionary to tensorboard"""
         assert 'i_itr' in d
         i_itr = d['i_itr']
-        if self.is_log_cycle(i_itr):
+        if i_itr % self.n_itr_cycle == 0:
             d = self._eval(d)
             for k, v in d.items():
                 self.add_to_board_scalar(k, v, i_itr)
 
     def add_to_board_scalar(self, name, val, i_itr):
         """write a scalar to tensorboard"""
-        if self.should_write(i_itr):
+        if self.is_log_cycle(i_itr):
             self.writer.add_scalar(name, _get_val(val), i_itr)
-
-    def add_to_board_histogram(self, name, val, i_itr):
-        if self.should_write_histogram(i_itr):
-            self.writer.add_histogram(name, _get_val(val), i_itr)
-
-    def should_write(self, i_itr):
-        return self.writer is not None and self.is_log_cycle(i_itr)
-
-    def should_write_histogram(self, i_itr):
-        return self.writer is not None and self.is_log_cycle_hist(i_itr)
-
-    def is_log_cycle_hist(self, i_itr):
-        return i_itr % self.n_log_hist_cycle == 0
 
 
 class NumpyWriterCb(Callback):
