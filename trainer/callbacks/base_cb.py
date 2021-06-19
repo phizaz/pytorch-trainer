@@ -108,10 +108,13 @@ class StatsCallback(Callback):
         self,
         n_itr_cycle: int = None,
         n_ep_cycle: float = None,
+        n_sample_cycle: int = None,
     ):
         super().__init__()
         self.n_itr_cycle = n_itr_cycle
         self.n_ep_cycle = n_ep_cycle
+        self.n_sample_cycle = n_sample_cycle
+
         self._state['hist'] = defaultdict(list)
         # to be put to the progress bar (only)
         self.stats = {}
@@ -157,14 +160,35 @@ class StatsCallback(Callback):
     def df(self):
         return pd.DataFrame(self.hist)
 
-    def on_train_begin(self, vars: 'StageVars'):
+    # def on_train_begin(self, vars: 'StageVars'):
+    #     """automatically gets the ep cycle if n_itr_cycle is not given"""
+    #     if self.n_itr_cycle is None:
+    #         if self.n_ep_cycle is not None:
+    #             self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
+    #         else:
+    #             # default to 1 itr
+    #             self.n_itr_cycle = 1
+
+    def on_forward_begin(self, vars: 'StageVars'):
         """automatically gets the ep cycle if n_itr_cycle is not given"""
+        super().on_forward_begin(vars)
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
                 self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
+            elif self.n_sample_cycle is not None:
+                # we can get the sample cycle reliably only after the forward pass
+                self.n_itr_cycle = None
             else:
                 # default to 1 itr
                 self.n_itr_cycle = 1
+
+    def on_forward_end(self, vars: 'StageVars'):
+        super().on_forward_end(vars)
+        if self.n_itr_cycle is None:
+            if self.n_sample_cycle is not None:
+                assert 'n' in vars.forward, "forward must contain 'n' to determine the batch size"
+                batch_size = vars.forward['n']
+                self.n_itr_cycle = max(1, self.n_sample_cycle // batch_size)
 
     def on_batch_begin(self, vars: 'StageVars'):
         # clear the buffer
@@ -210,7 +234,12 @@ class StatsCallback(Callback):
             # it might be used by others
 
     def is_log_cycle(self, i_itr):
-        return i_itr % self.n_itr_cycle == 0
+        """
+        it is possible that n_itr_cycle is still None.
+        This is the case for n_sample_cycle is set.
+        In this case, n_sample_cycle will only be set after the first forward pass.
+        """
+        return self.n_itr_cycle is not None and i_itr % self.n_itr_cycle == 0
 
     def _eval(self, d):
         for k, v in d.items():
@@ -233,8 +262,11 @@ class BoardCallback(StatsCallback):
         self,
         n_itr_cycle: int = None,
         n_ep_cycle: float = None,
+        n_sample_cycle: int = None,
     ):
-        super().__init__(n_itr_cycle=n_itr_cycle, n_ep_cycle=n_ep_cycle)
+        super().__init__(n_itr_cycle=n_itr_cycle,
+                         n_ep_cycle=n_ep_cycle,
+                         n_sample_cycle=n_sample_cycle)
         self.writer = None
 
     def on_train_begin(self, vars: 'StageVars'):
@@ -265,7 +297,7 @@ class BoardCallback(StatsCallback):
         """write a dictionary to tensorboard"""
         assert 'i_itr' in d
         i_itr = d['i_itr']
-        if i_itr % self.n_itr_cycle == 0:
+        if self.is_log_cycle(i_itr):
             d = self._eval(d)
             for k, v in d.items():
                 self.add_to_board_scalar(k, v, i_itr)
@@ -288,9 +320,11 @@ class NumpyWriterCb(Callback):
         self.np_writer = None
 
     def on_train_begin(self, vars: 'StageVars'):
+        super().on_train_begin(vars)
         self.np_writer = NumpyWriter(self.path, n_max_width=self.n_max_width)
 
     def on_train_end(self, vars: 'StageVars'):
+        super().on_train_end(vars)
         if self.np_writer is not None:
             self.np_writer.flush()
             self.np_writer.close()
@@ -302,9 +336,10 @@ class BaseNumpyWriterCb(Callback):
         self.np_writer = None
         self.n_log_hist_cycle = n_log_hist_cycle
 
-    def on_train_begin(self, callbacks, vars: 'StageVars'):
+    def on_train_begin(self, vars: 'StageVars'):
         """automatically discovers the tensorboard cb"""
-        for cb in callbacks:
+        super().on_train_begin(vars)
+        for cb in vars.callbacks:
             if isinstance(cb, NumpyWriterCb):
                 self.np_writer = cb.np_writer
 
@@ -313,9 +348,10 @@ class BaseNumpyWriterCb(Callback):
             if self.np_writer is not None:
                 self.np_writer.write_hist(name, _get_val(val), i_itr)
 
-    def on_batch_end(self, trainer, i_itr, vars: 'StageVars'):
+    def on_batch_end(self, vars: 'StageVars'):
         if self.np_writer is not None:
             self.np_writer.flush()
+        super().on_batch_end(vars)
 
 
 class NumpyWeightHistCb(BaseNumpyWriterCb):
@@ -347,6 +383,7 @@ class TensorboardCb(Callback):
     @set_order(91)
     def on_train_begin(self, vars: 'StageVars'):
         from torch.utils.tensorboard import SummaryWriter
+        super().on_train_begin(vars)
         if not self.resume:
             if os.path.exists(self.path):
                 rmtree(self.path)
@@ -357,6 +394,7 @@ class TensorboardCb(Callback):
     def on_train_end(self, vars: 'StageVars'):
         if self.writer is not None:
             self.writer.close()
+        super().on_train_end(vars)
 
 
 def get_val_from_statcbs(key, callbacks):

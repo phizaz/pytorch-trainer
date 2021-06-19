@@ -43,9 +43,9 @@ class ProfilerCb(BoardCallback):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def on_batch_end(self, i_itr, **kwargs):
+    def on_batch_end(self, vars: StageVars):
         global _BUCKET
         self.add_to_hist(_BUCKET)
         # clear bucket
         _BUCKET = {}
-        super().on_batch_end(i_itr=i_itr, **kwargs)
+        super().on_batch_end(vars)

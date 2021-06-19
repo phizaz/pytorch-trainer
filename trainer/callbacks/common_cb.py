@@ -14,6 +14,7 @@ class GradientClipCb(Callback):
     def on_backward_end(self, vars: StageVars):
         nn.utils.clip_grad_norm_(iter_opt_params(vars.trainer.opt),
                                  max_norm=self.clip_norm)
+        super().on_backward_end(vars)
 
 
 class LRSchedulerCb(Callback):
@@ -40,6 +41,7 @@ class LRSchedulerCb(Callback):
             self.n_cycle_itr = int(self.n_cycle_ep * vars.n_ep_itr)
 
     def on_step_begin(self, vars: StageVars):
+        super().on_step_begin(vars)
         if vars.i_itr % self.n_cycle_itr == 0:
             try:
                 loss = get_val_from_statcbs(self.loss_key, vars.callbacks)
@@ -90,6 +92,7 @@ class CosineAnnealingWarmRestartsLRCb(Callback):
     # should load before resume
     @set_order(0)
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
             vars.trainer.opt,
             T_0=self.T_0,
@@ -101,6 +104,7 @@ class CosineAnnealingWarmRestartsLRCb(Callback):
 
     def on_batch_end(self, vars: StageVars):
         self.scheduler.step(vars.f_ep)
+        super().on_batch_end(vars)
 
 
 class LRReducePlateauCb(Callback):
@@ -147,6 +151,7 @@ class LRReducePlateauCb(Callback):
     # should load before resume
     @set_order(0)
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
                 self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
@@ -167,6 +172,7 @@ class LRReducePlateauCb(Callback):
             # getting the key value from the stats
             v = get_val_from_statcbs(self.key, vars.callbacks)
             self.scheduler.step(v)
+        super().on_batch_end(vars)
 
 
 class WeightPolyakCb(Callback):
@@ -189,6 +195,7 @@ class WeightPolyakCb(Callback):
         new_w = self.rate * self.w + (1 - self.rate) * new_w
         nn.utils.vector_to_parameters(new_w, vars.trainer.net.parameters())
         self.w = None
+        super().on_step_end(vars)
 
 
 class TerminateLRCb(Callback):
@@ -208,6 +215,7 @@ class TerminateLRCb(Callback):
             if lr <= self.lr_thresh:
                 raise TerminateLRException(
                     f'terminated because lr {lr} <= {self.lr_thresh}')
+        super().on_batch_end(vars)
 
 
 class EarlyStopException(GracefulException):
@@ -234,6 +242,7 @@ class EarlyStopCb(Callback):
         self._state['i'] = 0
 
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         self.n_itr_cycle = self.n_ep_cycle * vars.n_ep_itr
 
     def on_batch_end(self, vars: StageVars):
@@ -264,13 +273,15 @@ class EarlyStopCb(Callback):
                 print(f'early stop: gap {self.i - self.best_i}')
             if self.i - self.best_i > self.patience:
                 raise EarlyStopException('early stop')
+        super().on_train_end(vars)
 
 
 class StopAnyTimeCb(Callback):
     """supress the keyboard interrupt allowing to stop the training anytime
     while getting the return results"""
-    def on_abrupt_end(self, e, **kwargs):
-        if isinstance(e, KeyboardInterrupt):
+    def on_abrupt_end(self, vars: StageVars):
+        super().on_abrupt_end(vars)
+        if isinstance(vars.e, KeyboardInterrupt):
             # suppress the raise
             return True
         else:
@@ -290,6 +301,7 @@ class AutoInterrupt(Callback):
 
     def on_batch_begin(self, vars: StageVars):
         # this will allow for the validate to end from the last itr
+        super().on_batch_begin(vars)
         if vars.i_itr >= self.n_itr:
             raise AutoInterruptException(
                 f'auto interrupt at i_itr = {self.n_itr}')

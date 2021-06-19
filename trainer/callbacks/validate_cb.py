@@ -17,20 +17,21 @@ class ValidateCb(BoardCallback):
         on_end: extra validation before ending (even it doesn't divide)
     """
     def __init__(
-            self,
-            loader: DataLoader,
-            callbacks=None,
-            name: str = 'val',
-            n_itr_cycle: int = None,
-            n_ep_cycle: float = None,
-            on_end=False,
-            predictor_cls=ValidatePredictor,
+        self,
+        loader: DataLoader,
+        callbacks=None,
+        name: str = 'val',
+        n_itr_cycle: int = None,
+        n_ep_cycle: float = None,
+        n_sample_cycle: int = None,
+        on_end=False,
+        predictor_cls=ValidatePredictor,
     ):
         # n_log_cycle = 1, when it say writes it should write
-        super().__init__()
+        super().__init__(n_itr_cycle=n_itr_cycle,
+                         n_ep_cycle=n_ep_cycle,
+                         n_sample_cycle=n_sample_cycle)
         self.loader = loader
-        self.n_itr_cycle = n_itr_cycle
-        self.n_ep_cycle = n_ep_cycle
         self.name = name
         if callbacks is None:
             callbacks = []
@@ -46,25 +47,26 @@ class ValidateCb(BoardCallback):
             ReportLoaderStatsCb(),
         ]
 
-    def on_train_begin(self, n_ep_itr, **kwargs):
-        super().on_train_begin(n_ep_itr=n_ep_itr, **kwargs)
+    def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
-                self.n_itr_cycle = int(self.n_ep_cycle * n_ep_itr)
+                self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
             else:
                 # default to 1 ep
-                self.n_itr_cycle = n_ep_itr
+                self.n_itr_cycle = vars.n_ep_itr
 
     # should run a bit early
     # so that others that might be able to use 'val_loss'
     @set_order(90)
-    def on_batch_end(self, trainer, i_itr: int, n_max_itr: int, **kwargs):
-        if ((self.on_end and i_itr == n_max_itr)
-                or i_itr % self.n_itr_cycle == 0):
+    def on_batch_end(self, vars: StageVars):
+        if ((self.on_end and vars.i_itr == vars.n_max_itr)
+                or vars.i_itr % self.n_itr_cycle == 0):
 
             # make prediction and collect the stats
             # predictor returns the stats
-            predictor = self.predictor_cls(trainer, callbacks=self.callbacks)
+            predictor = self.predictor_cls(vars.trainer,
+                                           callbacks=self.callbacks)
             res = predictor.predict(self.loader)
             if isinstance(res, tuple):
                 bar, info = res
@@ -86,8 +88,9 @@ class ValidateCb(BoardCallback):
             bar = prepend(bar)
             info = prepend(info)
 
-            bar.update({'i_itr': i_itr})
-            info.update({'i_itr': i_itr})
+            bar.update({'i_itr': vars.i_itr})
+            info.update({'i_itr': vars.i_itr})
             self.add_to_bar_and_hist(bar)
             self.add_to_hist(info)
             self._flush()
+        super().on_batch_end(vars)

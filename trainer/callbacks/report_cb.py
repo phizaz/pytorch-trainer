@@ -56,6 +56,7 @@ class ProgressCb(Callback):
         self.progress.update(i_itr - self.progress.n)
 
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         # minitirs = 1, means check the update every iteration (disable dynamic miniters)
         # position = len(TQDM) # not friendly
         position = 0  # friendly with logging to file
@@ -74,19 +75,23 @@ class ProgressCb(Callback):
     @set_order(1000)  # wait for stats
     def on_batch_end(self, vars: StageVars):
         self.update(vars.callbacks, vars.i_itr)
+        super().on_batch_end(vars)
 
     @set_order(1000)  # wait for stats
     def on_train_end(self, vars: StageVars):
         if self.progress is not None:
             self.close()
+        super().on_train_end(vars)
 
     def on_abrupt_end(self, vars: StageVars):
+        super().on_abrupt_end(vars)
         if self.progress is not None:
             self.close()
 
 
 class ReportLoaderStatsCb(StatsCallback):
     def on_batch_begin(self, vars: StageVars):
+        super().on_batch_begin(vars)
         if isinstance(vars.loader, BaseLoaderWrapper):
             # push the value to progress bar
             stats = vars.loader.stats()
@@ -102,6 +107,7 @@ class LiveDataframeCb(StatsCallback):
         self.writer = None
 
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         if vars.i_itr == vars.n_max_itr:
             # the job is already finished!
             return
@@ -134,6 +140,7 @@ class LiveDataframeCb(StatsCallback):
         if self.writer is not None:
             self.write(vars.callbacks, vars.i_itr)
             self.writer.close()
+        super().on_train_end(vars)
 
 
 class ReportLRCb(BoardCallback):
@@ -152,6 +159,7 @@ class ReportLRCb(BoardCallback):
         if len(lrs) > 1:
             info.update({f'lr{i+1}': lr for i, lr in enumerate(lrs[1:])})
         self.add_to_bar_and_hist(info)
+        super().on_step_end(vars)
 
 
 class ReportGradnormCb(BoardCallback):
@@ -173,6 +181,7 @@ class ReportGradnormCb(BoardCallback):
                 'i_itr': vars.i_itr,
                 self.name: self.avg['grad_norm'].val(),
             })
+        super().on_backward_end(vars)
 
 
 class ReportWeightNormCb(BoardCallback):
@@ -192,6 +201,7 @@ class ReportWeightNormCb(BoardCallback):
             self.name:
             lambda: many_l2_norm(*list(iter_opt_params(vars.trainer.opt)))
         })
+        super().on_step_end(vars)
 
 
 class ReportDeltaNormCb(BoardCallback):
@@ -210,6 +220,7 @@ class ReportDeltaNormCb(BoardCallback):
         if self.is_log_cycle(vars.i_itr) or self.is_log_cycle_hist(vars.i_itr):
             # because this command incurs copy of weights in mix precision (could be slow)
             self.w_before = params_to_vec(iter_opt_params(vars.trainer.opt))
+        super().on_backward_end(vars)
 
     def on_step_end(self, vars: StageVars):
         def delta():
@@ -226,6 +237,7 @@ class ReportDeltaNormCb(BoardCallback):
                 'i_itr': vars.i_itr,
                 self.name: self.avg['delta_norm'].val(),
             })
+        super().on_step_end(vars)
 
 
 class BatchPerSecondCb(BoardCallback):
@@ -252,6 +264,7 @@ class TimeElapsedCb(BoardCallback):
         self._state['time_elapsed'] = 0
 
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         self.start_time = time.time()
         self.offset = self.time_elapsed
 
@@ -271,6 +284,7 @@ class VisualizeWeightCb(BoardCallback):
             param = nn.utils.parameters_to_vector(iter_opt_params(trainer.opt))
             self.writer.add_histogram('weight/hist/all', param, vars.i_itr)
             self.writer.add_scalar('weight/norm/all', param.norm(), vars.i_itr)
+        super().on_batch_end(vars)
 
 
 def list_name(net, prefix=''):
@@ -299,3 +313,4 @@ class VisualizeWeightByLayerCb(BoardCallback):
                 self.writer.add_histogram(f'weight/hist{name}', p, vars.i_itr)
                 self.writer.add_scalar(f'weight/norm{name}', p.norm(),
                                        vars.i_itr)
+        super().on_batch_end(vars)

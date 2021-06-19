@@ -14,6 +14,7 @@ class CollectCb(StatsCallback):
         self.has_authority = {k: False for k in self.collect_keys}
 
     def on_ep_begin(self, vars: StageVars):
+        super().on_ep_begin(vars)
         for k in self.collect_keys:
             if k not in vars.buffer:
                 self.has_authority[k] = True
@@ -39,6 +40,7 @@ class CollectCb(StatsCallback):
                 # flattens on the end of epoch
                 if vars.i_itr % vars.n_ep_itr == 0:
                     vars.buffer[k] = self._combine(vars.buffer[k])
+        super().on_forward_end(vars)
 
 
 class MovingAvgCb(BoardCallback):
@@ -56,6 +58,7 @@ class MovingAvgCb(BoardCallback):
         self._state['avg'] = defaultdict(partial(SMA, size=n))
 
     def on_backward_begin(self, vars: StageVars):
+        super().on_backward_begin(vars)
         # update the stats
         for k in self.keys:
             val = vars.forward.get(k, None)
@@ -86,9 +89,11 @@ class AvgCb(StatsCallback):
         self.avg = None
 
     def on_ep_begin(self, vars: StageVars):
+        super().on_ep_begin(vars)
         self.avg = defaultdict(Average)
 
     def on_backward_begin(self, vars: StageVars):
+        super().on_backward_begin(vars)
         for k in self.keys:
             val = item(vars.forward.get(k, None))
             if val is None:

@@ -62,6 +62,7 @@ class AutoResumeCb(Callback):
     # should resume before normal loop
     @set_order(90)
     def on_train_begin(self, vars: StageVars):
+        super().on_train_begin(vars)
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
                 self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
@@ -75,6 +76,7 @@ class AutoResumeCb(Callback):
     def on_batch_end(self, vars: StageVars):
         if self.n_itr_cycle > 0 and vars.i_itr % self.n_itr_cycle == 0:
             self._save(vars)
+        super().on_batch_end(vars)
 
     def on_train_end(self, vars: StageVars):
         if vars.i_itr > 1:
@@ -87,8 +89,10 @@ class AutoResumeCb(Callback):
         if self.return_best_model:
             # load the best model at the end
             self._load_best(vars.trainer)
+        super().on_train_end(vars)
 
     def on_abrupt_end(self, vars: StageVars):
+        super().on_abrupt_end(vars)
         if self.save_abrupt_end:
             if vars.i_itr > 1:
                 # it must have something to save
