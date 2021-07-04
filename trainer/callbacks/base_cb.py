@@ -305,7 +305,8 @@ class BoardCallback(StatsCallback):
     def add_to_board_scalar(self, name, val, i_itr):
         """write a scalar to tensorboard"""
         if self.is_log_cycle(i_itr):
-            self.writer.add_scalar(name, _get_val(val), i_itr)
+            if self.writer is not None:
+                self.writer.add_scalar(name, _get_val(val), i_itr)
 
 
 class NumpyWriterCb(Callback):

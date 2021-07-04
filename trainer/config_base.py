@@ -2,6 +2,7 @@ import json
 import os
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Union, Dict
 
 
 @dataclass
@@ -21,6 +22,23 @@ class BaseConfig:
             if isinstance(v, BaseConfig):
                 v.inherit(self)
                 v.propagate()
+
+    def update(self, conf: Union['BaseConfig', Dict]):
+        """
+        update the current config with new not None values.
+        """
+        if conf is None:
+            # do nothing with None
+            return
+        if isinstance(conf, dict):
+            d = conf
+        else:
+            d = conf.__dict__
+        for k, v in d.items():
+            # update only new values (not none)
+            if v is not None:
+                assert hasattr(self, k), f"current object doesn't have '{k}'"
+                setattr(self, k, v)
 
     def save(self, save_path):
         """save config to json file"""
