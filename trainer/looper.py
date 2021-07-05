@@ -26,6 +26,7 @@ class StageVars:
     p_ep: float
     buffer: Dict
     i_itr: int
+    i_sample: int
     data: Dict = None
     forward: Dict = None
     e: Exception = None
@@ -35,7 +36,7 @@ class LooperInterface:
     """a base for looper should have the following interface"""
     def __init__(self):
         # book keeping
-        self.state = {'i_itr': 0}
+        self.state = {'i_itr': 0, 'i_sample': 0}
         # buffer collects outputs from the model
         # this is useful for calculating dataset-wise metrics, like BLEU or AUROC
         # callbacks populate data in buffer
@@ -106,6 +107,7 @@ class Looper:
             p_ep=(self.state['i_itr'] % n_ep_itr) / n_ep_itr * 100,
             buffer=self.buffer,
             i_itr=self.state['i_itr'],
+            i_sample=self.state['i_sample'],
             data=data,
             forward=forward,
             e=e,
@@ -120,6 +122,8 @@ class Looper:
         # forward pass
         self('on_forward_begin', data=data)
         forward = self.base.forward_pass(data=data, vars=self.stage_vars(data=data))
+        assert 'n' in forward, "forward must contain 'n'"
+        self.state['i_sample'] += forward['n']
         self('on_forward_end', data=data, forward=forward)
         # backward pass
         self('on_backward_begin', data=data, forward=forward)

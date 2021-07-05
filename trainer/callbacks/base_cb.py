@@ -116,6 +116,7 @@ class StatsCallback(Callback):
         self.n_sample_cycle = n_sample_cycle
 
         self._state['hist'] = defaultdict(list)
+        self._state['prev_i_sample'] = 0
         # to be put to the progress bar (only)
         self.stats = {}
         # to be put to the history
@@ -160,35 +161,17 @@ class StatsCallback(Callback):
     def df(self):
         return pd.DataFrame(self.hist)
 
-    # def on_train_begin(self, vars: 'StageVars'):
-    #     """automatically gets the ep cycle if n_itr_cycle is not given"""
-    #     if self.n_itr_cycle is None:
-    #         if self.n_ep_cycle is not None:
-    #             self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
-    #         else:
-    #             # default to 1 itr
-    #             self.n_itr_cycle = 1
-
-    def on_forward_begin(self, vars: 'StageVars'):
+    def on_train_begin(self, vars: 'StageVars'):
         """automatically gets the ep cycle if n_itr_cycle is not given"""
-        super().on_forward_begin(vars)
         if self.n_itr_cycle is None:
             if self.n_ep_cycle is not None:
                 self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
             elif self.n_sample_cycle is not None:
-                # we can get the sample cycle reliably only after the forward pass
-                self.n_itr_cycle = None
+                # do nothing .. we will use the vars.i_sample
+                pass
             else:
                 # default to 1 itr
                 self.n_itr_cycle = 1
-
-    def on_forward_end(self, vars: 'StageVars'):
-        super().on_forward_end(vars)
-        if self.n_itr_cycle is None:
-            if self.n_sample_cycle is not None:
-                assert 'n' in vars.forward, "forward must contain 'n' to determine the batch size"
-                batch_size = vars.forward['n']
-                self.n_itr_cycle = max(1, self.n_sample_cycle // batch_size)
 
     def on_batch_begin(self, vars: 'StageVars'):
         # clear the buffer
@@ -197,30 +180,33 @@ class StatsCallback(Callback):
     def on_batch_end(self, vars: 'StageVars'):
         """auto-flush after each iteration.
         don't forget to flush if you overload this method."""
+        # update the prev
+        if self.n_sample_cycle is not None:
+            self.prev_i_sample = vars.i_sample
         self._flush()
 
-    def add_to_bar(self, d):
+    def add_to_bar(self, d, vars: 'StageVars'):
         """update the stats which shall be shown in the progress bar (only)"""
-        assert 'i_itr' in d
-        i_itr = d['i_itr']
-        if self.is_log_cycle(i_itr):
+        if 'i_itr' not in d:
+            d['i_itr'] = vars.i_itr
+        if self.is_log_cycle(vars):
             d = self._eval(d)
             self.stats.update(_strip(d))
 
-    def add_to_bar_and_hist(self, d):
+    def add_to_bar_and_hist(self, d, vars: 'StageVars'):
         """both update the progress bar and write to the buffer (history), don't forget to flush"""
-        assert 'i_itr' in d
-        i_itr = d['i_itr']
-        if self.is_log_cycle(i_itr):
+        if 'i_itr' not in d:
+            d['i_itr'] = vars.i_itr
+        if self.is_log_cycle(vars):
             d = self._eval(d)
             self.stats.update(_strip(d))
             self.buffer.update(_strip(d))
 
-    def add_to_hist(self, d):
+    def add_to_hist(self, d, vars: 'StageVars'):
         """buffer before putting into the history after flushing"""
-        assert 'i_itr' in d
-        i_itr = d['i_itr']
-        if self.is_log_cycle(i_itr):
+        if 'i_itr' not in d:
+            d['i_itr'] = vars.i_itr
+        if self.is_log_cycle(vars):
             d = self._eval(d)
             self.buffer.update(_strip(d))
 
@@ -233,13 +219,19 @@ class StatsCallback(Callback):
             # should not clear the buffer,
             # it might be used by others
 
-    def is_log_cycle(self, i_itr):
+    def is_log_cycle(self, vars: 'StageVars', include_first: bool = False):
         """
         it is possible that n_itr_cycle is still None.
         This is the case for n_sample_cycle is set.
         In this case, n_sample_cycle will only be set after the first forward pass.
         """
-        return self.n_itr_cycle is not None and i_itr % self.n_itr_cycle == 0
+        if self.n_itr_cycle is not None:
+            return vars.i_itr % self.n_itr_cycle == 0 or (include_first
+                                                          and vars.i_itr <= 1)
+        if self.n_sample_cycle is not None:
+            return vars.i_sample // self.n_sample_cycle > self.prev_i_sample // self.n_sample_cycle or (
+                include_first and self.prev_i_sample == 0)
+        raise NotImplementedError()
 
     def _eval(self, d):
         for k, v in d.items():
@@ -278,35 +270,34 @@ class BoardCallback(StatsCallback):
             if isinstance(cb, TensorboardCb):
                 self.writer = cb.writer
 
-    def add_to_bar(self, d):
+    def add_to_bar(self, d, vars: 'StageVars'):
         """update the stats which shall be shown in the progress bar (only)"""
-        self.add_to_board(d)
-        super().add_to_bar(d)
+        self.add_to_board(d, vars)
+        super().add_to_bar(d, vars)
 
-    def add_to_bar_and_hist(self, d):
+    def add_to_bar_and_hist(self, d, vars: 'StageVars'):
         """both update the progress bar and write to the buffer (history), don't forget to flush"""
-        self.add_to_board(d)
-        super().add_to_bar_and_hist(d)
+        self.add_to_board(d, vars)
+        super().add_to_bar_and_hist(d, vars)
 
-    def add_to_hist(self, d):
+    def add_to_hist(self, d, vars: 'StageVars'):
         """buffer before putting into the history after flushing"""
-        self.add_to_board(d)
-        super().add_to_hist(d)
+        self.add_to_board(d, vars)
+        super().add_to_hist(d, vars)
 
-    def add_to_board(self, d):
+    def add_to_board(self, d, vars: 'StageVars'):
         """write a dictionary to tensorboard"""
-        assert 'i_itr' in d
-        i_itr = d['i_itr']
-        if self.is_log_cycle(i_itr):
+        if self.is_log_cycle(vars):
             d = self._eval(d)
             for k, v in d.items():
-                self.add_to_board_scalar(k, v, i_itr)
+                self.add_to_board_scalar(k, v, vars)
 
-    def add_to_board_scalar(self, name, val, i_itr):
+    def add_to_board_scalar(self, name, val, vars: 'StageVars'):
         """write a scalar to tensorboard"""
-        if self.is_log_cycle(i_itr):
+        if self.is_log_cycle(vars):
             if self.writer is not None:
-                self.writer.add_scalar(name, _get_val(val), i_itr)
+                # tensorboard uses i_sample as the main axis
+                self.writer.add_scalar(name, _get_val(val), vars.i_sample)
 
 
 class NumpyWriterCb(Callback):

@@ -68,11 +68,10 @@ class MovingAvgCb(BoardCallback):
             self.avg[k].update(val, w=vars.forward['n'])
 
         info = {f'{self.prefix}{k}': self.avg[k].val() for k in self.keys}
-        info['i_itr'] = vars.i_itr
         if self.mode == 'bar':
-            self.add_to_bar_and_hist(info)
+            self.add_to_bar_and_hist(info, vars)
         elif self.mode == 'buffer':
-            self.add_to_hist(info)
+            self.add_to_hist(info, vars)
         else:
             raise NotImplementedError()
 
@@ -101,8 +100,7 @@ class AvgCb(StatsCallback):
             n = vars.forward['n']
             self.avg[k].update(val, w=n)
         info = {k: self.avg[k].val() for k in self.keys}
-        info['i_itr'] = vars.i_itr
-        self.add_to_bar_and_hist(info)
+        self.add_to_bar_and_hist(info, vars)
 
 
 class AUROCCb(CollectCb):
@@ -177,18 +175,16 @@ class AUROCCb(CollectCb):
         macro = np.array([aurocs[i] for i in idx if i not in ignored]).mean()
 
         bar = {
-            'i_itr': vars.i_itr,
             'auroc_weighted': weighted,
             'auroc_macro': macro,
         }
-        self.add_to_bar_and_hist(bar)
+        self.add_to_bar_and_hist(bar, vars)
 
         if self.cls_id_to_name is None:
             info = {f'auroc_{i}': aurocs[i] for i in idx}
         else:
             info = {f'auroc_{self.cls_id_to_name[i]}': aurocs[i] for i in idx}
-        info['i_itr'] = vars.i_itr
-        self.add_to_hist(info)
+        self.add_to_hist(info, vars)
         self._flush()
 
 

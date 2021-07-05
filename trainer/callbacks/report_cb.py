@@ -16,15 +16,13 @@ TQDM = []
 class ReportItrCb(BoardCallback):
     def on_batch_begin(self, vars: StageVars):
         super().on_batch_begin(vars)
-        self.add_to_bar_and_hist({
-            'i_itr': vars.i_itr,
-            'f_ep': vars.f_ep,
-        })
-        self.add_to_hist({
-            'i_itr': vars.i_itr,
-            'i_ep': vars.i_ep,
-            '%ep': vars.p_ep
-        })
+        self.add_to_bar_and_hist(
+            {
+                'i_itr': vars.i_itr,
+                'i_sample': vars.i_sample,
+                'f_ep': vars.f_ep,
+            }, vars)
+        self.add_to_hist({'i_ep': vars.i_ep, '%ep': vars.p_ep}, vars)
 
 
 class ProgressCb(Callback):
@@ -95,8 +93,7 @@ class ReportLoaderStatsCb(StatsCallback):
         if isinstance(vars.loader, BaseLoaderWrapper):
             # push the value to progress bar
             stats = vars.loader.stats()
-            stats['i_itr'] = vars.i_itr
-            self.add_to_bar(stats)
+            self.add_to_bar(stats, vars)
 
 
 class LiveDataframeCb(StatsCallback):
@@ -155,10 +152,10 @@ class ReportLRCb(BoardCallback):
         for g in vars.trainer.opt.param_groups:
             lrs.append(g['lr'])
 
-        info = {'i_itr': vars.i_itr, 'lr': lrs[0]}
+        info = {'lr': lrs[0]}
         if len(lrs) > 1:
             info.update({f'lr{i+1}': lr for i, lr in enumerate(lrs[1:])})
-        self.add_to_bar_and_hist(info)
+        self.add_to_bar_and_hist(info, vars)
         super().on_step_end(vars)
 
 
@@ -172,15 +169,18 @@ class ReportGradnormCb(BoardCallback):
     def on_backward_end(self, vars: StageVars):
         if self.use_histogram:
             grad_vec = grad_vec_from_params(iter_opt_params(vars.trainer.opt))
-            self.add_to_board_histogram(f'{self.name}/hist', grad_vec,
-                                        vars.i_itr)
-        if self.is_log_cycle(vars.i_itr):
+            self.add_to_board_histogram(
+                f'{self.name}/hist',
+                grad_vec,
+                vars.i_sample,
+            )
+
+        if self.is_log_cycle(vars):
             grad_norm = grads_norm(iter_opt_params(vars.trainer.opt))
             self.avg['grad_norm'].update(grad_norm)
             self.add_to_hist({
-                'i_itr': vars.i_itr,
                 self.name: self.avg['grad_norm'].val(),
-            })
+            }, vars)
         super().on_backward_end(vars)
 
 
@@ -194,13 +194,13 @@ class ReportWeightNormCb(BoardCallback):
         if self.use_histogram:
             self.add_to_board_histogram(
                 f'{self.name}/hist', lambda: nn.utils.parameters_to_vector(
-                    iter_opt_params(vars.trainer.opt)), vars.i_itr)
-        self.add_to_bar_and_hist({
-            'i_itr':
-            vars.i_itr,
-            self.name:
-            lambda: many_l2_norm(*list(iter_opt_params(vars.trainer.opt)))
-        })
+                    iter_opt_params(vars.trainer.opt)), vars.i_sample)
+
+        self.add_to_bar_and_hist(
+            {
+                self.name:
+                lambda: many_l2_norm(*list(iter_opt_params(vars.trainer.opt)))
+            }, vars)
         super().on_step_end(vars)
 
 
@@ -228,15 +228,15 @@ class ReportDeltaNormCb(BoardCallback):
                 iter_opt_params(vars.trainer.opt))
 
         if self.use_histogram:
-            self.add_to_board_histogram(f'{self.name}/hist', delta, vars.i_itr)
+            self.add_to_board_histogram(f'{self.name}/hist', delta,
+                                        vars.i_sample)
 
         if self.is_log_cycle(vars.i_itr):
             delta_norm = delta().norm()
             self.avg['delta_norm'].update(delta_norm)
             self.add_to_hist({
-                'i_itr': vars.i_itr,
                 self.name: self.avg['delta_norm'].val(),
-            })
+            }, vars)
         super().on_step_end(vars)
 
 
@@ -253,7 +253,7 @@ class BatchPerSecondCb(BoardCallback):
             self.sum.append(1 / rate)
             s = np.array(self.sum)
             bps = len(s) / s.sum()
-            self.add_to_hist({'batch_per_second': bps, 'i_itr': vars.i_itr})
+            self.add_to_hist({'batch_per_second': bps}, vars)
         self.prev = now
         super().on_batch_end(vars)
 
@@ -271,46 +271,5 @@ class TimeElapsedCb(BoardCallback):
     def on_batch_end(self, vars: StageVars):
         now = time.time()
         self.time_elapsed = int(now - self.start_time) + self.offset
-        self.add_to_bar_and_hist({
-            'i_itr': vars.i_itr,
-            'time': self.time_elapsed
-        })
-        super().on_batch_end(vars)
-
-
-class VisualizeWeightCb(BoardCallback):
-    def on_batch_end(self, trainer, vars: StageVars):
-        if self.should_write(vars.i_itr):
-            param = nn.utils.parameters_to_vector(iter_opt_params(trainer.opt))
-            self.writer.add_histogram('weight/hist/all', param, vars.i_itr)
-            self.writer.add_scalar('weight/norm/all', param.norm(), vars.i_itr)
-        super().on_batch_end(vars)
-
-
-def list_name(net, prefix=''):
-    """traverse the module to get each layer and their names,
-    it outputs in the same order as net.parameters()"""
-    has_child = False
-
-    out = []
-    for i, m in enumerate(net.children()):
-        has_child = True
-        m_name = f'{prefix}/{i}_{m.__class__.__name__}'
-        out += list_name(m, m_name)
-
-    if not has_child:
-        for name, p in net.named_parameters():
-            out.append((f'{prefix}/{name}', p))
-
-    return out
-
-
-class VisualizeWeightByLayerCb(BoardCallback):
-    def on_batch_end(self, vars: StageVars):
-        if self.should_write(vars.i_itr):
-            for name, p in list_name(vars.trainer.net):
-                # you will have the leading /
-                self.writer.add_histogram(f'weight/hist{name}', p, vars.i_itr)
-                self.writer.add_scalar(f'weight/norm{name}', p.norm(),
-                                       vars.i_itr)
+        self.add_to_bar_and_hist({'time': self.time_elapsed}, vars)
         super().on_batch_end(vars)
