@@ -47,21 +47,12 @@ class ValidateCb(BoardCallback):
             ReportLoaderStatsCb(),
         ]
 
-    def on_train_begin(self, vars: StageVars):
-        super().on_train_begin(vars)
-        if self.n_itr_cycle is None:
-            if self.n_ep_cycle is not None:
-                self.n_itr_cycle = int(self.n_ep_cycle * vars.n_ep_itr)
-            else:
-                # default to 1 ep
-                self.n_itr_cycle = vars.n_ep_itr
-
     # should run a bit early
     # so that others that might be able to use 'val_loss'
     @set_order(90)
     def on_batch_end(self, vars: StageVars):
         if ((self.on_end and vars.i_itr == vars.n_max_itr)
-                or vars.i_itr % self.n_itr_cycle == 0):
+                or self.is_log_cycle(vars)):
 
             # make prediction and collect the stats
             # predictor returns the stats
@@ -87,10 +78,7 @@ class ValidateCb(BoardCallback):
 
             bar = prepend(bar)
             info = prepend(info)
-
-            bar.update({'i_itr': vars.i_itr})
-            info.update({'i_itr': vars.i_itr})
-            self.add_to_bar_and_hist(bar)
-            self.add_to_hist(info)
+            self.add_to_bar_and_hist(bar, vars)
+            self.add_to_hist(info, vars)
             self._flush()
         super().on_batch_end(vars)

@@ -38,7 +38,7 @@ class BasePredictor(LooperInterface):
         with set_mode(self.trainer.net, 'eval'):
             return self.trainer.forward_pass(data, **kwargs)
 
-    def backward_pass(self, forward, **kwargs):
+    def backward_pass(self, **kwargs):
         # no need for backward
         pass
 
