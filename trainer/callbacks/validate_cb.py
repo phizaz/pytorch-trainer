@@ -22,7 +22,7 @@ class ValidateCb(BoardCallback):
         callbacks=None,
         name: str = 'val',
         n_itr_cycle: int = None,
-        n_ep_cycle: float = None,
+        n_ep_cycle: float = 1,
         n_sample_cycle: int = None,
         on_end=False,
         predictor_cls=ValidatePredictor,
