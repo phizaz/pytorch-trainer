@@ -23,7 +23,11 @@ class SMA(Average):
         self.weights = deque(maxlen=size)
 
     def update(self, x: Tensor, w: int = 1):
-        self.vals.append(item(x))
+        x = item(x)
+        if x != x:
+            # nan
+            return
+        self.vals.append(x)
         self.weights.append(w)
 
     def val(self) -> Tensor:
